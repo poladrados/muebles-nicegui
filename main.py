@@ -1,8 +1,5 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
-# Diseño estilo Streamlit (fondo azul, header centrado, cards full-width)
-# + Thumbs uniformes a la izquierda, ficha a la derecha, expander abajo
-# + Modo admin completo (login, stats, export CSV, alta/edición/eliminar, fotos, vendido)
-# + WhatsApp OG: /og_img/{id}.jpg y página SSR /o/{id} con metadatos Open Graph
+# Versión parcheada: iconos PWA locales, cabecera coherente, layout móvil responsive
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
@@ -24,15 +21,18 @@ BASE_URL = os.getenv('BASE_URL', 'https://inventarioeljueves.app')
 
 # ---------- PWA / static ----------
 try:
+    # Sirve /muebles-app desde carpeta local "static"
     app.add_static_files('/muebles-app', 'static')
 except Exception:
     pass
 
-# ---------- HEAD (fuente + matomo + estilos pequeños) ----------
+# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive) ----------
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
-<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
-<meta name="theme-color" content="#E6F0F8">
+<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon-180.png">
+<meta name="theme-color" content="#023e8a">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
 <!-- iOS PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -46,6 +46,19 @@ ui.add_head_html("""
   .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
   .kv-desc .v { font-size: 1.05rem; line-height: 1.5; }
   .kv-attr, .kv-line { padding-bottom: 0 !important; line-height: 1.5; }
+
+  /* ====== Responsive cards ====== */
+  .card-flex { display:flex; gap:24px; align-items:flex-start; flex-wrap:nowrap; }
+  .card-main { flex:0 0 auto; width:clamp(280px, 36vw, 520px); }
+  .card-details { flex:1 1 320px; min-width:300px; }
+  .card-thumb { width:100%; height:240px; object-fit:cover; border-radius:8px; cursor:zoom-in; }
+
+  @media (max-width: 640px) {
+    .card-flex { flex-wrap:wrap !important; }
+    .card-main { width:100% !important; }
+    .card-details { flex:1 1 100% !important; min-width:0 !important; }
+    .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
+  }
 </style>
 <script>
 var _paq = window._paq = window._paq || [];
@@ -142,6 +155,7 @@ def _cache_headers(data: bytes):
     return {'Cache-Control':'public, max-age=2592000','ETag':etag}, etag
 
 # ----- Formato ES (precio / fecha) -----
+
 def _fmt_precio(p):
     try:
         n = float(p)
@@ -200,6 +214,7 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
     return Response(content=data, media_type='image/webp', headers=headers)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
+
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
     raw = base64.b64decode(b64)
     im = Image.open(BytesIO(raw))
@@ -244,6 +259,7 @@ def _root_sw():
     return Response('// no sw', media_type='text/javascript')
 
 # === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
+
 def _esc(s: str) -> str:
     return html.escape(s or '')
 
@@ -399,6 +415,7 @@ async def set_principal_image(mueble_id: int, img_id: int):
                                img_id, mueble_id)
 
 # ---------- Listado (diseño + admin) ----------
+
 def _safe(s: str) -> str:
     return html.escape(s or "")
 
@@ -439,8 +456,9 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 if es_nuevo(m.get('fecha')):
                     ui.label('🆕 Nuevo').style('color:#16a34a; font-weight:700;')
 
-            with ui.element('div').style('display:flex; gap:24px; align-items:flex-start; flex-wrap:nowrap;'):
-                with ui.element('div').style('flex:0 0 auto; width:clamp(280px, 36vw, 520px);'):
+            # ====== CONTENEDOR FLEXIBLE (RESPONSIVE) ======
+            with ui.element('div').classes('card-flex'):
+                with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
                         with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
                             big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
@@ -450,10 +468,10 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
 
                     ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
                         .props('loading=lazy alt="Imagen principal"')\
-                        .style('width:100%; height:240px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
+                        .classes('card-thumb')\
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
-                with ui.element('div').style('flex:1 1 320px; min-width:300px;'):
+                with ui.element('div').classes('card-details'):
                     _kv_attr('Tipo', _safe(m.get('tipo','')))
                     _kv_attr('Precio', _fmt_precio(m.get('precio')))
                     _kv_attr('Tienda', _safe(m.get('tienda','')))
@@ -469,7 +487,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         else:
                             _kv_desc(desc)
 
-                    # Comparte la página SSR /o/{id} con timestamp para evitar cache antiguo
+                    # Comparte la página SSR /o/{id} con timestamp
                     share_url = f"{BASE_URL}/o/{mid}?v={int(datetime.now().timestamp())}"
                     with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
                         ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
@@ -492,19 +510,21 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                 dd.open()
                             ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
 
-            async with app.state.pool.acquire() as conn:
-                total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
-            if total_imgs and total_imgs > 1:
-                with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
-                    with ui.row().style('gap:12px; flex-wrap:wrap;'):
-                        for i in range(1, total_imgs):
-                            ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
-                              .props('loading=lazy alt="Miniatura"')\
-                              .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
-                              .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+        async with app.state.pool.acquire() as conn:
+            total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
+        if total_imgs and total_imgs > 1:
+            with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
+                with ui.row().style('gap:12px; flex-wrap:wrap;'):
+                    for i in range(1, total_imgs):
+                        # Miniaturas adicionales
+                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
+                          .props('loading=lazy alt="Miniatura"')\
+                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
+                          .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
 
 # ---------- Página ----------
-LOGO_URL = "https://raw.githubusercontent.com/poladrados/muebles-app/main/images/web-app-manifest-192x192.png"
+# Logo VISUAL del header (no es el icono PWA). Usa el asset local para coherencia.
+LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
@@ -512,8 +532,7 @@ async def index(request: Request):
     if os.path.exists(os.path.join('static', 'service-worker.js')):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/service-worker.js', {scope:'/'})
-            .catch(()=>{});
+          navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
         }
         """)
 
@@ -683,6 +702,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),    # <- Railway inyecta PORT
         reload=os.getenv('RELOAD', '0') == '1', # <- en Railway deja RELOAD=0 (por defecto)
     )
+
 
 
 

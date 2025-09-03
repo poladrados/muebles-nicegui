@@ -1,11 +1,24 @@
-const CACHE='eljueves-v1';
-const PRECACHE=['/','/muebles-app/manifest.json','/muebles-app/images/icon-192.png'];
+const CACHE='eljueves-v2';
+const PRECACHE=[
+  '/', '/?source=pwa',
+  '/muebles-app/manifest.json',
+  '/muebles-app/images/icon-192.png',
+  '/muebles-app/images/icon-512.png',
+  '/muebles-app/images/maskable-192.png',
+  '/muebles-app/images/maskable-512.png',
+  '/muebles-app/images/apple-touch-icon-180.png'
+];
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(PRECACHE)));
   self.skipWaiting();
 });
-self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});
+self.addEventListener('activate',e=>{
+  e.waitUntil(self.clients.claim().then(async()=>{
+    const keys=await caches.keys();
+    await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
+  }));
+});
 self.addEventListener('fetch',e=>{
   const r=e.request;
   if (r.method!=='GET') return;
@@ -17,3 +30,4 @@ self.addEventListener('fetch',e=>{
   }
   e.respondWith(fetch(r).catch(()=>caches.match(r)));
 });
+
