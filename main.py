@@ -30,7 +30,7 @@ except Exception:
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
-<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon-180.png">
+<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
