@@ -676,14 +676,17 @@ async def index(request: Request):
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
-    PORT = int(os.getenv('PORT', '8080'))  # Railway fija PORT
+    port = int(os.getenv('PORT', '8080'))   # Railway marca PORT
+    # Reload solo en local (cuando usas 8080)
+    use_reload = (port == 8080)
     ui.run(
         title="Inventario El Jueves",
         storage_secret=os.getenv('STORAGE_SECRET', 'cambia_esto'),
-        reload=True,
+        reload=use_reload,
         host='0.0.0.0',
-        port=PORT,
+        port=port,
     )
+
 
 
 
