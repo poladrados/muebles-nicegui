@@ -1,0 +1,7 @@
+nicegui
+fastapi
+asyncpg
+python-dotenv
+pandas
+pillow
+uvicorn

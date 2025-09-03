@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Entorno & secretos
+.env
+
+# NiceGUI/varios
+.nicegui/
+.DS_Store
