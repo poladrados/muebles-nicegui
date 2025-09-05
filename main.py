@@ -1,9 +1,8 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
-# Versión parcheada: iconos PWA locales, cabecera coherente, layout móvil responsive
+# Versión: registro temprano del SW en <head>, apple-touch-icon único, layout móvil responsive
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
-from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 import asyncpg
 import os, base64, urllib.parse, hashlib, hmac, asyncio, html, math
@@ -26,17 +25,13 @@ try:
 except Exception:
     pass
 
-# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive) ----------
+# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive + SW temprano) ----------
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
-<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
+<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=8">
 <link rel="icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
-<link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png">
-<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png?v=5">
-<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png?v=5">
-<link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png?v=5">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png?v=8">
+
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
@@ -44,6 +39,16 @@ ui.add_head_html("""
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<!-- Registro TEMPRANO del Service Worker (en <head>) -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', {scope: '/'})
+      .catch(()=>{});
+  });
+}
+</script>
 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
@@ -66,6 +71,7 @@ ui.add_head_html("""
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
 </style>
+
 <script>
 var _paq = window._paq = window._paq || [];
 _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
@@ -162,7 +168,6 @@ def _cache_headers(data: bytes):
     return {'Cache-Control':'public, max-age=2592000','ETag':etag}, etag
 
 # ----- Formato ES (precio / fecha) -----
-
 def _fmt_precio(p):
     try:
         n = float(p)
@@ -221,7 +226,6 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
     return Response(content=data, media_type='image/webp', headers=headers)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
-
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
     raw = base64.b64decode(b64)
     im = Image.open(BytesIO(raw))
@@ -264,20 +268,8 @@ def _root_sw():
     if os.path.exists(path):
         return FileResponse(path, media_type='text/javascript; charset=utf-8')
     return Response('// no sw', media_type='text/javascript')
-# === Iconos en raíz para iOS y favicon ===
-@app.get('/apple-touch-icon.png', include_in_schema=False)
-def _root_apple_icon():
-    return FileResponse(os.path.join('static', 'images', 'apple-touch-icon.png'),
-                        media_type='image/png')
 
-@app.get('/favicon.ico', include_in_schema=False)
-def _root_favicon():
-    # Reutiliza el 192 como favicon
-    return FileResponse(os.path.join('static', 'images', 'icon-192.png'),
-                        media_type='image/png')
-
-
-# === Iconos en raíz para iOS y favicon ===
+# === Iconos en raíz para iOS y favicon (una sola definición) ===
 @app.get('/apple-touch-icon.png', include_in_schema=False)
 def _root_apple_icon():
     path = os.path.join('static', 'images', 'apple-touch-icon.png')
@@ -294,7 +286,6 @@ def _root_favicon():
     return Response(status_code=404)
 
 # === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
-
 def _esc(s: str) -> str:
     return html.escape(s or '')
 
@@ -449,127 +440,13 @@ async def set_principal_image(mueble_id: int, img_id: int):
             await conn.execute('UPDATE imagenes_muebles SET es_principal=TRUE WHERE id=$1 AND mueble_id=$2',
                                img_id, mueble_id)
 
-# ---------- Listado (diseño + admin) ----------
-
-def _safe(s: str) -> str:
-    return html.escape(s or "")
-
-def _kv(label: str, value: str):
-    ui.html(
-        f'<div class="kv kv-line" style="margin-bottom:16px">'
-        f'<strong class="k">{_safe(label)}:</strong>&nbsp;<span class="v">{_safe(value)}</span>'
-        f'</div>'
-    )
-
-def _kv_attr(label: str, value: str):
-    ui.html(
-        f'<div class="kv kv-line" style="margin-bottom:16px">'
-        f'<strong class="k">{_safe(label)}:</strong>&nbsp;<span class="v">{_safe(value)}</span>'
-        f'</div>'
-    )
-
-def _kv_desc(value: str):
-    ui.html(
-        f'<div class="kv kv-desc kv-line" style="margin-bottom:16px">'
-        f'<strong class="k">Descripción:</strong>&nbsp;<span class="v">{_safe(value)}</span>'
-        f'</div>'
-    )
-
-async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
-                         orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None):
-    rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset)
-    if only_id is not None:
-        rows = [r for r in rows if int(r['id']) == int(only_id)]
-    if not rows:
-        ui.label('Sin resultados').style('color:#6b7280');  return
-
-    for m in rows:
-        mid = int(m['id'])
-        with ui.card().style('width:100%; padding:16px;'):
-            with ui.row().style('align-items:center; gap:8px; margin-bottom:8px;'):
-                ui.label(str(m['nombre']).upper()).style('font-weight:700; font-size:20px;')
-                if es_nuevo(m.get('fecha')):
-                    ui.label('🆕 Nuevo').style('color:#16a34a; font-weight:700;')
-
-            # ====== CONTENEDOR FLEXIBLE (RESPONSIVE) ======
-            with ui.element('div').classes('card-flex'):
-                with ui.element('div').classes('card-main'):
-                    with ui.dialog() as dialog:
-                        with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
-                            big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
-                        ui.button('✕', on_click=dialog.close).props('flat round').classes('fixed top-3 right-3').style('background:rgba(255,255,255,.85);')
-                    def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
-                        big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
-
-                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
-                        .props('loading=lazy alt="Imagen principal"')\
-                        .classes('card-thumb')\
-                        .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
-
-                with ui.element('div').classes('card-details'):
-                    _kv_attr('Tipo', _safe(m.get('tipo','')))
-                    _kv_attr('Precio', _fmt_precio(m.get('precio')))
-                    _kv_attr('Tienda', _safe(m.get('tienda','')))
-                    _kv('Medidas', mostrar_medidas_extendido(m))
-                    if m.get('fecha'):
-                        _kv('Fecha registro', _fmt_fecha(m.get('fecha')))
-                    desc = (m.get('descripcion') or '').strip()
-                    if desc:
-                        if len(desc) > 220:
-                            _kv_desc(desc[:220] + '…')
-                            with ui.expansion('🔎 Ver más'):
-                                ui.label(desc).style('font-size:15px; line-height:1.5;')
-                        else:
-                            _kv_desc(desc)
-
-                    # Comparte la página SSR /o/{id} con timestamp
-                    share_url = f"{BASE_URL}/o/{mid}?v={int(datetime.now().timestamp())}"
-                    with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
-                        ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
-
-                    if is_admin():
-                        with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
-                            ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
-                            async def toggle(_=None, _mid=mid, vendido=not m['vendido']):
-                                await set_vendido(_mid, vendido); ui.run_javascript('location.reload()')
-                            ui.button('✓ Vendido' if not m['vendido'] else '↩ Disponible', on_click=toggle)
-                            def ask_delete_mueble(_=None, _mid=mid):
-                                with ui.dialog() as dd:
-                                    with ui.card():
-                                        ui.label('¿Eliminar este mueble?')
-                                        with ui.row().classes('justify-end'):
-                                            ui.button('Cancelar', on_click=dd.close).props('flat')
-                                            async def do_delete(_=None):
-                                                await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
-                                            ui.button('Eliminar', color='negative', on_click=do_delete)
-                                dd.open()
-                            ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
-
-        async with app.state.pool.acquire() as conn:
-            total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
-        if total_imgs and total_imgs > 1:
-            with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
-                with ui.row().style('gap:12px; flex-wrap:wrap;'):
-                    for i in range(1, total_imgs):
-                        # Miniaturas adicionales
-                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
-                          .props('loading=lazy alt="Miniatura"')\
-                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
-                          .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
-
 # ---------- Página ----------
 # Logo VISUAL del header (no es el icono PWA). Usa el asset local para coherencia.
 LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    # Registrar service worker si existe el archivo (evita 404 en dev)
-    if os.path.exists(os.path.join('static', 'service-worker.js')):
-        ui.run_javascript("""
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
-        }
-        """)
+    # (Registro del SW ahora se hace en <head>; no hace falta repetirlo aquí)
 
     # Si llega con ?id=... renderiza ese mueble (para humanos). Para WhatsApp usamos /o/{id}.
     item_id = request.query_params.get('id')
