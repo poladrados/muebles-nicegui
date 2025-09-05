@@ -1,5 +1,7 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
-# Versión: registro temprano del SW en <head>, apple-touch-icon único, layout móvil responsive
+# Versión parcheada: iconos PWA locales, cabecera coherente, layout móvil responsive
+# + Limpieza de <head> (sin duplicados) y badge APP/WEB para depurar modo standalone
+# + Endpoints raíz únicos: /apple-touch-icon.png, /favicon.ico, /service-worker.js
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
@@ -25,30 +27,23 @@ try:
 except Exception:
     pass
 
-# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive + SW temprano) ----------
+# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive) ----------
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
-<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=8">
-<link rel="icon" href="/favicon.ico">
-<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png?v=8">
+
+<!-- Icono navegador (favicon moderno) -->
+<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=6">
+
+<!-- iOS: icono y app-mode -->
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png?v=6">
 
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-<!-- iOS PWA -->
+<!-- iOS: abrir como app -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-<!-- Registro TEMPRANO del Service Worker (en <head>) -->
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js', {scope: '/'})
-      .catch(()=>{});
-  });
-}
-</script>
 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
@@ -70,7 +65,27 @@ if ('serviceWorker' in navigator) {
     .card-details { flex:1 1 100% !important; min-width:0 !important; }
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
+
+  /* Badge para saber si estás en modo app (standalone) o navegador */
+  .pwa-badge {
+    position: fixed; bottom: 10px; right: 10px; z-index: 9999;
+    padding: 4px 8px; border-radius: 999px; font: 11px/1 system-ui;
+    background: #10b981; color: white; opacity: .85;
+  }
 </style>
+
+<script>
+// Modo app (iOS: navigator.standalone; estándar: display-mode)
+(function(){
+  const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  document.documentElement.setAttribute('data-standalone', isStandalone ? '1' : '0');
+  // Pequeña marca (se ve solo para depurar)
+  const badge = document.createElement('div');
+  badge.className = 'pwa-badge';
+  badge.textContent = isStandalone ? 'APP' : 'WEB';
+  document.addEventListener('DOMContentLoaded', ()=>document.body.appendChild(badge));
+})();
+</script>
 
 <script>
 var _paq = window._paq = window._paq || [];
@@ -260,30 +275,23 @@ async def og_img(request: Request, mueble_id: int):
     headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': 'image/jpeg'}
     return Response(content=jpeg, media_type='image/jpeg', headers=headers)
 
-# === Service Worker en raíz para controlar toda la app ===
+# === Service Worker e iconos en raíz ===
 @app.get('/service-worker.js', include_in_schema=False)
 def _root_sw():
     """Sirve el SW desde la raíz con content-type correcto."""
     path = os.path.join('static', 'service-worker.js')
-    if os.path.exists(path):
-        return FileResponse(path, media_type='text/javascript; charset=utf-8')
-    return Response('// no sw', media_type='text/javascript')
+    return FileResponse(path, media_type='text/javascript; charset=utf-8') if os.path.exists(path) else Response('// no sw', media_type='text/javascript')
 
-# === Iconos en raíz para iOS y favicon (una sola definición) ===
 @app.get('/apple-touch-icon.png', include_in_schema=False)
 def _root_apple_icon():
     path = os.path.join('static', 'images', 'apple-touch-icon.png')
-    if os.path.exists(path):
-        return FileResponse(path, media_type='image/png')
-    return Response(status_code=404)
+    return FileResponse(path, media_type='image/png') if os.path.exists(path) else Response(status_code=404)
 
 @app.get('/favicon.ico', include_in_schema=False)
 def _root_favicon():
     # Reutilizamos el 192 como favicon (moderno). Si tienes un .ico, cámbialo aquí.
     path = os.path.join('static', 'images', 'icon-192.png')
-    if os.path.exists(path):
-        return FileResponse(path, media_type='image/png')
-    return Response(status_code=404)
+    return FileResponse(path, media_type='image/png') if os.path.exists(path) else Response(status_code=404)
 
 # === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
 def _esc(s: str) -> str:
@@ -446,7 +454,13 @@ LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    # (Registro del SW ahora se hace en <head>; no hace falta repetirlo aquí)
+    # Registrar service worker si existe el archivo (evita 404 en dev)
+    if os.path.exists(os.path.join('static', 'service-worker.js')):
+        ui.run_javascript("""
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
+        }
+        """)
 
     # Si llega con ?id=... renderiza ese mueble (para humanos). Para WhatsApp usamos /o/{id}.
     item_id = request.query_params.get('id')
