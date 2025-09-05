@@ -34,6 +34,9 @@ ui.add_head_html("""
 <link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png?v=5">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png?v=5">
+<link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png?v=5">
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
@@ -261,6 +264,18 @@ def _root_sw():
     if os.path.exists(path):
         return FileResponse(path, media_type='text/javascript; charset=utf-8')
     return Response('// no sw', media_type='text/javascript')
+# === Iconos en raíz para iOS y favicon ===
+@app.get('/apple-touch-icon.png', include_in_schema=False)
+def _root_apple_icon():
+    return FileResponse(os.path.join('static', 'images', 'apple-touch-icon.png'),
+                        media_type='image/png')
+
+@app.get('/favicon.ico', include_in_schema=False)
+def _root_favicon():
+    # Reutiliza el 192 como favicon
+    return FileResponse(os.path.join('static', 'images', 'icon-192.png'),
+                        media_type='image/png')
+
 
 # === Iconos en raíz para iOS y favicon ===
 @app.get('/apple-touch-icon.png', include_in_schema=False)
