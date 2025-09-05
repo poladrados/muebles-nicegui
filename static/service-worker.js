@@ -1,4 +1,5 @@
-const CACHE='eljueves-v2';
+const CACHE='eljueves-v3'; // súbelo a v3 para forzar actualización
+
 const PRECACHE=[
   '/', '/?source=pwa',
   '/muebles-app/manifest.json',
@@ -6,8 +7,10 @@ const PRECACHE=[
   '/muebles-app/images/icon-512.png',
   '/muebles-app/images/maskable-192.png',
   '/muebles-app/images/maskable-512.png',
-  '/muebles-app/images/apple-touch-icon-180.png'
+  '/muebles-app/images/apple-touch-icon.png', // <- correcto
+  '/apple-touch-icon.png'                      // <- alias en raíz
 ];
+
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(PRECACHE)));

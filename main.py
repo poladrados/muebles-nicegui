@@ -30,7 +30,10 @@ except Exception:
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
+<link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
+<link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png">
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
@@ -63,6 +66,7 @@ ui.add_head_html("""
 <script>
 var _paq = window._paq = window._paq || [];
 _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
+// Matomo
 (function() {
   var u="https://inventarioeljueves.matomo.cloud/";
   _paq.push(['setTrackerUrl', u+'matomo.php']);
@@ -257,6 +261,22 @@ def _root_sw():
     if os.path.exists(path):
         return FileResponse(path, media_type='text/javascript; charset=utf-8')
     return Response('// no sw', media_type='text/javascript')
+
+# === Iconos en raíz para iOS y favicon ===
+@app.get('/apple-touch-icon.png', include_in_schema=False)
+def _root_apple_icon():
+    path = os.path.join('static', 'images', 'apple-touch-icon.png')
+    if os.path.exists(path):
+        return FileResponse(path, media_type='image/png')
+    return Response(status_code=404)
+
+@app.get('/favicon.ico', include_in_schema=False)
+def _root_favicon():
+    # Reutilizamos el 192 como favicon (moderno). Si tienes un .ico, cámbialo aquí.
+    path = os.path.join('static', 'images', 'icon-192.png')
+    if os.path.exists(path):
+        return FileResponse(path, media_type='image/png')
+    return Response(status_code=404)
 
 # === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
 
@@ -702,6 +722,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),    # <- Railway inyecta PORT
         reload=os.getenv('RELOAD', '0') == '1', # <- en Railway deja RELOAD=0 (por defecto)
     )
+
 
 
 
