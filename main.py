@@ -833,10 +833,7 @@ async def index(request: Request):
                 comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
 
-# ---------- Ruta PWA mínima para probar standalone ----------
-@app.get('/pwa-min')
-def pwa_min():
-    html_doc = """<!doctype html>
+
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
