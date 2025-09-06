@@ -111,31 +111,32 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-/* ========= Matomo ========= */
-var _paq = window._paq = window._paq || [];
+  /* ========= Matomo ========= */
+  var _paq = window._paq = window._paq || [];
 
-/* Si usas varios dominios, lista aquí los que quieras medir con la misma propiedad */
-_paq.push(['setDomains', ['*.inventarioeljueves.app','web-production-a1a43.up.railway.app']]);
+  /* Atribución multi-dominio (ajusta la lista a tus hosts) */
+  _paq.push(['setCookieDomain', '*.web-production-a1a43.up.railway.app']);
+  _paq.push(['setDomains', ['*.web-production-a1a43.up.railway.app','*.inventarioeljueves.app']]); // quita el 2º si no lo usas aún
 
-/* Métricas básicas */
-_paq.push(['trackPageView']);
-_paq.push(['enableLinkTracking']);
+  /* Métricas básicas */
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
 
-/* Evento para saber si abren como PWA o navegador */
-(function () {
-  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
-  _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
-})();
+  /* Carga del tracker (usa tu subdominio Matomo Cloud e idSite) */
+  (function() {
+    var u='https://webproductiona1a43uprailwayapp.matomo.cloud/';
+    _paq.push(['setTrackerUrl', u+'matomo.php']);
+    _paq.push(['setSiteId','1']);  // <--- pon aquí tu idSite real
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.async=true; g.src='https://cdn.matomo.cloud/webproductiona1a43uprailwayapp.matomo.cloud/matomo.js';
+    s.parentNode.insertBefore(g,s);
+  })();
 
-/* Carga del tracker */
-(function() {
-  var u="https://inventarioeljueves.matomo.cloud/";
-  _paq.push(['setTrackerUrl', u+'matomo.php']);
-  _paq.push(['setSiteId', '1']); // <-- tu Site ID
-  var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-  g.async=true; g.src='https://cdn.matomo.cloud/inventarioeljueves.matomo.cloud/matomo.js';
-  s.parentNode.insertBefore(g,s);
-})();
+  /* Evento: ¿app (standalone) o navegador? */
+  window.addEventListener('load', function () {
+    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
+    _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
+  });
 
 /* Badge de depuración: muestra si está en standalone */
 (function () {
