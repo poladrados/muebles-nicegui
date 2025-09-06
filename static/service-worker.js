@@ -1,4 +1,4 @@
-const CACHE = 'eljueves-v5';
+const CACHE = 'eljueves-v6';
 const PRECACHE = [
   '/',
   '/?source=pwa',

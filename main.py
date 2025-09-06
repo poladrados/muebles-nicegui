@@ -140,6 +140,14 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
 
   console.log('display-mode standalone?', matchMedia('(display-mode: standalone)').matches);
   console.log('iOS standalone?', !!window.navigator.standalone);
+(function () {
+  var standalone = matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+  var badge = document.createElement('div');
+  badge.textContent = 'standalone: ' + standalone;
+  badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
+  document.body.appendChild(badge);
+})();
+
 </script>
 """)
 
