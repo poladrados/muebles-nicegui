@@ -4,7 +4,7 @@
 from nicegui import ui, app
 from fastapi import Response, Request, status
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, RedirectResponse
 import asyncpg
 import os, base64, urllib.parse, hashlib, hmac, asyncio, html, math
 from functools import partial
@@ -27,7 +27,7 @@ except Exception:
     pass
 
 ui.add_head_html("""
-<link rel="manifest" href="/muebles-app/manifest.json">
+<link rel="manifest" href="/manifest.webmanifest?v=20250906">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
@@ -139,6 +139,11 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
 })();
 </script>
 """)
+<script>
+  console.log('display-mode standalone?', matchMedia('(display-mode: standalone)').matches);
+  console.log('iOS standalone?', !!window.navigator.standalone);
+</script>
+
 # ---------- DB ----------
 DB_DSN = (
     f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
@@ -334,6 +339,16 @@ def _root_favicon():
     return FileResponse(os.path.join('static', 'images', 'icon-192.png'),
                         media_type='image/png')
 
+# === Manifest en raíz con MIME correcto ===
+@app.get('/manifest.webmanifest', include_in_schema=False)
+def _root_manifest():
+    # sirve el mismo archivo 'static/manifest.json' pero como manifest web
+    return FileResponse(
+        os.path.join('static', 'manifest.json'),
+        media_type='application/manifest+json; charset=utf-8'
+    )
+
+
 
 
 # === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
@@ -358,11 +373,29 @@ async def og_page(request: Request, mid: int):
     human_url = f"{BASE_URL}/?id={mid}"
     full_url = str(request.url)
 
+    # Detecta bots de vista previa; humanos → 302 a la home con PWA
+    ua = (request.headers.get('user-agent') or '').lower()
+    is_bot = any(k in ua for k in (
+        'whatsapp', 'facebookexternalhit', 'twitterbot', 'telegram',
+        'discordbot', 'slackbot', 'linkedinbot'
+    ))
+    if not is_bot:
+        return RedirectResponse(url=human_url, status_code=302)
+
+    # Para bots: OG + también meta PWA (no molesta)
     html_doc = f"""<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <title>{_esc(title)}</title>
+
+<link rel="manifest" href="/manifest.webmanifest?v=20250906">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#023e8a">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(desc)}">
@@ -377,15 +410,13 @@ async def og_page(request: Request, mid: int):
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(desc)}">
 <meta name="twitter:image" content="{img_url}">
-
-<meta http-equiv="refresh" content="0; url={human_url}">
 </head>
 <body>
-<p>Redirigiendo a <a href="{human_url}">{_esc(title)}</a>…</p>
-<script>location.replace("{human_url}");</script>
+<p>Vista previa para compartir <a href="{human_url}">{_esc(title)}</a>.</p>
 </body>
 </html>"""
     return Response(html_doc, media_type='text/html; charset=utf-8')
+
 
 # ---------- DB helpers ----------
 async def query_tipos():

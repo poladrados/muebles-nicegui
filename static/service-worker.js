@@ -1,8 +1,8 @@
-const CACHE = 'eljueves-v4';
+const CACHE = 'eljueves-v5';
 const PRECACHE = [
   '/',
   '/?source=pwa',
-  '/muebles-app/manifest.json',
+  '/manifest.webmanifest',
   '/muebles-app/images/icon-192.png',
   '/muebles-app/images/icon-512.png',
   '/muebles-app/images/maskable-192.png',
@@ -11,6 +11,7 @@ const PRECACHE = [
   '/apple-touch-icon.png',
   '/favicon.ico'
 ];
+
 
 self.addEventListener('install', e => {
   e.waitUntil(
