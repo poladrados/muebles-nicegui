@@ -1,7 +1,6 @@
-const CACHE = 'eljueves-v6';
+const CACHE = 'eljueves-v7';   // <-- bump
 const PRECACHE = [
-  '/',
-  '/?source=pwa',
+  // ¡OJO! No cacheamos '/' ni HTML para evitar instalaciones con HTML antiguo
   '/manifest.webmanifest',
   '/muebles-app/images/icon-192.png',
   '/muebles-app/images/icon-512.png',
@@ -12,54 +11,44 @@ const PRECACHE = [
   '/favicon.ico'
 ];
 
-
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(cache => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    self.clients.claim().then(async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys.filter(k => k !== CACHE)
-            .map(k => caches.delete(k))
-      );
-    })
-  );
+  e.waitUntil(self.clients.claim().then(async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+  }));
 });
 
 self.addEventListener('fetch', e => {
   const request = e.request;
-  
-  // No cachear solicitudes POST o no GET
+
+  // Navegaciones (HTML): SIEMPRE red a red, sin cache
+  if (request.mode === 'navigate') {
+    e.respondWith(fetch(request));
+    return;
+  }
+
   if (request.method !== 'GET') return;
-  
-  // Estrategia: Cache First para assets, Network First para datos
+
+  // Cache First para imágenes/icons; Network First para el resto
   if (request.url.includes('/img/') || request.url.includes('/muebles-app/')) {
     e.respondWith(
       caches.match(request).then(cached => {
         return cached || fetch(request).then(response => {
-          // No cachear respuestas que no sean OK
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-          const responseToCache = response.clone();
-          caches.open(CACHE).then(cache => {
-            cache.put(request, responseToCache);
-          });
+          if (!response || response.status !== 200 || response.type === 'opaque') return response;
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(request, copy));
           return response;
         });
       })
     );
   } else {
-    // Para otras solicitudes, intentar network primero
-    e.respondWith(
-      fetch(request).catch(() => caches.match(request))
-    );
+    e.respondWith(fetch(request).catch(() => caches.match(request)));
   }
 });
+

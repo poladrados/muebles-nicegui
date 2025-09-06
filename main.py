@@ -1,5 +1,5 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
-# Versión parcheada: iconos PWA locales, cabecera coherente, layout móvil responsive
+# PWA fixed: manifest en raíz, origen auto, sin saltos, test /pwa-min, SW sin cachear '/'
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
@@ -19,9 +19,17 @@ PAGE_SIZE = 30
 THUMB_VER = "3"  # cache-buster miniaturas
 BASE_URL = os.getenv('BASE_URL', 'https://inventarioeljueves.app')
 
+# ---------- helpers ----------
+def _esc(s: str) -> str:
+    return html.escape(s or '')
+
+def _origin_from(request: Request) -> str:
+    """Origen absoluto fiable del host que ha hecho la petición."""
+    # request.base_url == "https://host/"  -> quitamos la barra final
+    return str(request.base_url).rstrip('/')
+
 # ---------- PWA / static ----------
 try:
-    # Sirve /muebles-app desde carpeta local "static"
     app.add_static_files('/muebles-app', 'static')
 except Exception:
     pass
@@ -30,72 +38,39 @@ ui.add_head_html("""
 <link rel="manifest" href="/manifest.webmanifest?v=20250906">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
 <link rel="icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/muebles-app/images/apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
-<link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png">
 <meta name="theme-color" content="#023e8a">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
-<!-- iOS PWA - Configuración mejorada -->
+<!-- iOS PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-touch-startup-image" content="/muebles-app/images/apple-touch-icon.png">
 <meta name="format-detection" content="telephone=no">
 
-<!-- Prevenir zoom en inputs -->
 <style>
-  input, select, textarea {
-    font-size: 16px !important;
-  }
-  
-  /* Modo PWA standalone */
+  input, select, textarea { font-size: 16px !important; }
   .pwa-standalone body {
     margin: 0;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     overflow: hidden;
   }
-
-  .pwa-standalone header {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  /* Ocultar elementos de navegación en modo PWA */
+  .pwa-standalone header { padding-top: env(safe-area-inset-top); }
   @media all and (display-mode: standalone) {
-    body {
-      -webkit-overflow-scrolling: touch;
-    }
-    
-    /* Prevenir bounce scroll en iOS */
-    html, body {
-      overscroll-behavior: none;
-      position: fixed;
-      width: 100%;
-      height: 100%;
-    }
+    body { -webkit-overflow-scrolling: touch; }
+    html, body { overscroll-behavior: none; position: fixed; width: 100%; height: 100%; }
   }
-
   @media (max-width: 640px) {
-    body {
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      -webkit-tap-highlight-color: transparent;
-    }
+    body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   }
-
-  /* pares clave-valor (etiquetas en negrita) */
   .kv{margin:0;}
   .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
   .kv-desc .v { font-size: 1.05rem; line-height: 1.5; }
   .kv-attr, .kv-line { padding-bottom: 0 !important; line-height: 1.5; }
-
-  /* ====== Responsive cards ====== */
   .card-flex { display:flex; gap:24px; align-items:flex-start; flex-wrap:nowrap; }
   .card-main { flex:0 0 auto; width:clamp(280px, 36vw, 520px); }
   .card-details { flex:1 1 320px; min-width:300px; }
   .card-thumb { width:100%; height:240px; object-fit:cover; border-radius:8px; cursor:zoom-in; }
-
   @media (max-width: 640px) {
     .card-flex { flex-wrap:wrap !important; }
     .card-main { width:100% !important; }
@@ -107,21 +82,19 @@ ui.add_head_html("""
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
 <script>
-// Script para modo standalone
 if (window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
-
-// Registrar service worker mejorado
+// Registrar SW
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/service-worker.js', { 
+    navigator.serviceWorker.register('/service-worker.js', {
       scope: '/',
       updateViaCache: 'none'
     }).then(function(registration) {
       console.log('SW registered: ', registration);
-    }).catch(function(registrationError) {
-      console.log('SW registration failed: ', registrationError);
+    }).catch(function(err) {
+      console.log('SW registration failed: ', err);
     });
   });
 }
@@ -138,16 +111,14 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   s.parentNode.insertBefore(g,s);
 })();
 
-  console.log('display-mode standalone?', matchMedia('(display-mode: standalone)').matches);
-  console.log('iOS standalone?', !!window.navigator.standalone);
+// Debug badge
 (function () {
-  var standalone = matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
   var badge = document.createElement('div');
   badge.textContent = 'standalone: ' + standalone;
   badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
-  document.body.appendChild(badge);
+  document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(badge); });
 })();
-
 </script>
 """)
 
@@ -232,7 +203,7 @@ def _cache_headers(data: bytes):
     return {'Cache-Control':'public, max-age=2592000','ETag':etag}, etag
 
 # ----- Formato ES (precio / fecha) -----
-
+import math
 def _fmt_precio(p):
     try:
         n = float(p)
@@ -242,19 +213,16 @@ def _fmt_precio(p):
         s = f"{int(round(n)):,}".replace(",", ".")
         return f"{s} €"
     else:
-        entero = int(n)
-        dec = abs(n - entero)
+        entero = int(n); dec = abs(n - entero)
         s_ent = f"{entero:,}".replace(",", ".")
         s_dec = f"{dec:.2f}"[1:].replace(".", ",")
         return f"{s_ent}{s_dec} €"
 
+from datetime import datetime
 def _parse_dt(dt):
-    if isinstance(dt, datetime):
-        return dt
-    try:
-        return datetime.fromisoformat(str(dt))
-    except:
-        return None
+    if isinstance(dt, datetime): return dt
+    try: return datetime.fromisoformat(str(dt))
+    except: return None
 
 def _fmt_fecha(dt):
     d = _parse_dt(dt)
@@ -291,14 +259,11 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
     return Response(content=data, media_type='image/webp', headers=headers)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
-
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
     raw = base64.b64decode(b64)
     im = Image.open(BytesIO(raw))
-    if im.mode not in ('RGB', 'RGBA'):
-        im = im.convert('RGB')
-    else:
-        im = im.convert('RGB')
+    if im.mode not in ('RGB', 'RGBA'): im = im.convert('RGB')
+    else: im = im.convert('RGB')
     w, h = im.size
     if w > max_w:
         new_h = int(h * (max_w / w))
@@ -309,7 +274,6 @@ def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
 
 @app.get('/og_img/{mueble_id}.jpg')
 async def og_img(request: Request, mueble_id: int):
-    """JPEG 1200px pensado para og:image (WhatsApp/Twitter/FB)."""
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT imagen_base64 FROM imagenes_muebles
@@ -326,15 +290,15 @@ async def og_img(request: Request, mueble_id: int):
     headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': 'image/jpeg'}
     return Response(content=jpeg, media_type='image/jpeg', headers=headers)
 
-# === Service Worker en raíz para controlar toda la app ===
+# === Service Worker en raíz ===
 @app.get('/service-worker.js', include_in_schema=False)
 def _root_sw():
-    """Sirve el SW desde la raíz con content-type correcto."""
     path = os.path.join('static', 'service-worker.js')
     if os.path.exists(path):
         return FileResponse(path, media_type='text/javascript; charset=utf-8')
     return Response('// no sw', media_type='text/javascript')
-# === Iconos en raíz para iOS y favicon ===
+
+# === Iconos / manifest en raíz ===
 @app.get('/apple-touch-icon.png', include_in_schema=False)
 def _root_apple_icon():
     return FileResponse(os.path.join('static', 'images', 'apple-touch-icon.png'),
@@ -342,54 +306,40 @@ def _root_apple_icon():
 
 @app.get('/favicon.ico', include_in_schema=False)
 def _root_favicon():
-    # Reutiliza el 192 como favicon
     return FileResponse(os.path.join('static', 'images', 'icon-192.png'),
                         media_type='image/png')
 
-# === Manifest en raíz con MIME correcto ===
 @app.get('/manifest.webmanifest', include_in_schema=False)
 def _root_manifest():
-    # sirve el mismo archivo 'static/manifest.json' pero como manifest web
     return FileResponse(
         os.path.join('static', 'manifest.json'),
         media_type='application/manifest+json; charset=utf-8'
     )
 
-
-
-
-# === Página SSR con metadatos OG para WhatsApp: /o/{id} ===
-
-def _esc(s: str) -> str:
-    return html.escape(s or '')
-
+# === Página SSR con OG: /o/{id} ===
 @app.get('/o/{mid}')
 async def og_page(request: Request, mid: int):
-    """Página estática con metadatos OG para que WhatsApp cree la tarjeta."""
     async with app.state.pool.acquire() as conn:
         m = await conn.fetchrow('SELECT * FROM muebles WHERE id=$1', mid)
     if not m:
         return Response('Not found', status_code=status.HTTP_404_NOT_FOUND, media_type='text/plain')
 
+    origin = _origin_from(request)  # <- usa el mismo host de la petición
     title = f"{m['nombre']} · {_fmt_precio(m.get('precio'))}"
     desc = (m.get('descripcion') or '').strip()
-    if len(desc) > 200:
-        desc = desc[:200] + '…'
+    if len(desc) > 200: desc = desc[:200] + '…'
 
-    img_url = f"{BASE_URL}/og_img/{mid}.jpg"
-    human_url = f"{BASE_URL}/?id={mid}"
+    img_url = f"{origin}/og_img/{mid}.jpg"
+    human_url = f"{origin}/?id={mid}"
     full_url = str(request.url)
 
-    # Detecta bots de vista previa; humanos → 302 a la home con PWA
     ua = (request.headers.get('user-agent') or '').lower()
     is_bot = any(k in ua for k in (
-        'whatsapp', 'facebookexternalhit', 'twitterbot', 'telegram',
-        'discordbot', 'slackbot', 'linkedinbot'
+        'whatsapp','facebookexternalhit','twitterbot','telegram','discordbot','slackbot','linkedinbot'
     ))
     if not is_bot:
         return RedirectResponse(url=human_url, status_code=302)
 
-    # Para bots: OG + también meta PWA (no molesta)
     html_doc = f"""<!doctype html>
 <html lang="es">
 <head>
@@ -423,7 +373,6 @@ async def og_page(request: Request, mid: int):
 </body>
 </html>"""
     return Response(html_doc, media_type='text/html; charset=utf-8')
-
 
 # ---------- DB helpers ----------
 async def query_tipos():
@@ -531,7 +480,6 @@ async def set_principal_image(mueble_id: int, img_id: int):
                                img_id, mueble_id)
 
 # ---------- Listado (diseño + admin) ----------
-
 def _safe(s: str) -> str:
     return html.escape(s or "")
 
@@ -557,12 +505,15 @@ def _kv_desc(value: str):
     )
 
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
-                         orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None):
+                         orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
+                         base_origin: str | None = None):
     rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset)
     if only_id is not None:
         rows = [r for r in rows if int(r['id']) == int(only_id)]
     if not rows:
         ui.label('Sin resultados').style('color:#6b7280');  return
+
+    origin = (base_origin or BASE_URL).rstrip('/')
 
     for m in rows:
         mid = int(m['id'])
@@ -572,7 +523,6 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 if es_nuevo(m.get('fecha')):
                     ui.label('🆕 Nuevo').style('color:#16a34a; font-weight:700;')
 
-            # ====== CONTENEDOR FLEXIBLE (RESPONSIVE) ======
             with ui.element('div').classes('card-flex'):
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
@@ -603,8 +553,8 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         else:
                             _kv_desc(desc)
 
-                    # Comparte la página SSR /o/{id} con timestamp
-                    share_url = f"{BASE_URL}/o/{mid}?v={int(datetime.now().timestamp())}"
+                    # URL absoluta del compartir (mismo host que el de la sesión)
+                    share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
                     with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
                         ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
 
@@ -632,19 +582,17 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
             with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
                     for i in range(1, total_imgs):
-                        # Miniaturas adicionales
                         ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
                           .props('loading=lazy alt="Miniatura"')\
                           .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
 
 # ---------- Página ----------
-# Logo VISUAL del header (no es el icono PWA). Usa el asset local para coherencia.
 LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    # Registrar service worker si existe el archivo (evita 404 en dev)
+    # Registrar SW si existe
     if os.path.exists(os.path.join('static', 'service-worker.js')):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
@@ -652,18 +600,19 @@ async def index(request: Request):
         }
         """)
 
-    # Si llega con ?id=... renderiza ese mueble (para humanos). Para WhatsApp usamos /o/{id}.
+    base_origin = _origin_from(request)  # <- mismo host
+
+    # Si llega con ?id=... renderiza ese mueble
     item_id = request.query_params.get('id')
     if item_id:
-        try:
-            mid = int(item_id)
-        except:
-            mid = None
+        try: mid = int(item_id)
+        except: mid = None
         cont = ui.column()
         list_unsold = ui.column(); list_sold = ui.column()
         with cont:
             await pintar_listado(vendidos=None, nombre_like=None, tienda=None, tipo=None,
-                                 orden='Más reciente', only_id=mid if item_id else None)
+                                 orden='Más reciente', only_id=mid if item_id else None,
+                                 base_origin=base_origin)
         return
 
     # Drawer admin
@@ -722,11 +671,8 @@ async def index(request: Request):
     ui.button(on_click=drawer.toggle).props('icon=menu flat round')\
         .classes('fixed top-2 left-2 z-50 bg-white')
 
-    # ====== ENVOLTORIO RAÍZ CON FONDO AZUL ======
     with ui.element('div').style('min-height:100vh; width:100%; background:#E6F0F8; display:flex; flex-direction:column; align-items:center;'):
-        # Contenedor centrado
         with ui.element('div').style('width:100%; max-width:1200px; padding:0 16px;'):
-            # Header (armario + título en una fila centrados)
             with ui.element('div').style('width:100%; background:#fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.1); margin:20px 0;'):
                 with ui.element('div').style('display:flex; align-items:center; justify-content:center; gap:12px; text-align:center; padding:10px 24px;'):
                     ui.image(LOGO_URL).style('height:clamp(32px, 4.8vw, 54px); width:auto;')
@@ -735,11 +681,9 @@ async def index(request: Request):
                         'color:#023e8a; font-size:clamp(1.4rem, 2.2vw, 2.1rem); line-height:1; margin:0;'
                     )
 
-            # Botón alta (también en drawer)
             if is_admin():
                 ui.button('➕ Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()).classes('q-mb-md')
 
-            # Filtros
             with ui.row().style('gap:12px; margin-bottom:16px;'):
                 filtro_nombre = ui.input('Buscar por nombre').props('clearable')
                 filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda')
@@ -750,7 +694,6 @@ async def index(request: Request):
                 filtro_tipo.options = await query_tipos()
             ui.timer(0.05, lambda: asyncio.create_task(init_tipos()), once=True)
 
-            # Listas y paginación
             cont = ui.column()
             list_unsold = ui.column()
             list_sold = ui.column()
@@ -768,7 +711,7 @@ async def index(request: Request):
                 with container:
                     await pintar_listado(vendidos=vendidos_flag, nombre_like=filtro_nombre.value,
                                          tienda=filtro_tienda.value, tipo=filtro_tipo.value, orden=orden.value,
-                                         limit=PAGE_SIZE, offset=offset)
+                                         limit=PAGE_SIZE, offset=offset, base_origin=base_origin)
                 app.storage.user[off_key] = offset + PAGE_SIZE
                 return has_more
 
@@ -809,15 +752,42 @@ async def index(request: Request):
                 comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
 
+# ---------- Ruta PWA mínima para probar standalone ----------
+@app.get('/pwa-min')
+def pwa_min():
+    html_doc = """<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PWA test</title>
+<style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#0a2540;color:#fff;font:16px -apple-system,system-ui}</style>
+</head><body>
+<h1>PWA minimal</h1>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const standalone = (matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
+  const badge = document.createElement('div');
+  badge.textContent = 'standalone: ' + standalone;
+  badge.style = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;border-radius:6px;z-index:2147483647';
+  document.body.appendChild(badge);
+});
+</script>
+</body></html>"""
+    return Response(html_doc, media_type='text/html; charset=utf-8')
+
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         title="Inventario El Jueves",
         storage_secret=os.getenv('STORAGE_SECRET', 'cambia_esto'),
         host='0.0.0.0',
-        port=int(os.getenv('PORT', '8080')),    # <- Railway inyecta PORT
-        reload=os.getenv('RELOAD', '0') == '1', # <- en Railway deja RELOAD=0 (por defecto)
+        port=int(os.getenv('PORT', '8080')),
+        reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
