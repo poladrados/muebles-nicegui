@@ -49,28 +49,38 @@ ui.add_head_html("""
 <meta name="format-detection" content="telephone=no">
 
 <style>
+  /* Evitar zoom en inputs iOS */
   input, select, textarea { font-size: 16px !important; }
+
+  /* Modo PWA standalone: respeta safe areas */
   .pwa-standalone body {
     margin: 0;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     overflow: hidden;
   }
   .pwa-standalone header { padding-top: env(safe-area-inset-top); }
+
+  /* iOS: evitar bounce scroll cuando es standalone */
   @media all and (display-mode: standalone) {
     body { -webkit-overflow-scrolling: touch; }
     html, body { overscroll-behavior: none; position: fixed; width: 100%; height: 100%; }
   }
+
   @media (max-width: 640px) {
     body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   }
+
+  /* ====== estilos UI ====== */
   .kv{margin:0;}
   .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
   .kv-desc .v { font-size: 1.05rem; line-height: 1.5; }
   .kv-attr, .kv-line { padding-bottom: 0 !important; line-height: 1.5; }
+
   .card-flex { display:flex; gap:24px; align-items:flex-start; flex-wrap:nowrap; }
   .card-main { flex:0 0 auto; width:clamp(280px, 36vw, 520px); }
   .card-details { flex:1 1 320px; min-width:300px; }
   .card-thumb { width:100%; height:240px; object-fit:cover; border-radius:8px; cursor:zoom-in; }
+
   @media (max-width: 640px) {
     .card-flex { flex-wrap:wrap !important; }
     .card-main { width:100% !important; }
@@ -82,45 +92,69 @@ ui.add_head_html("""
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
 <script>
+/* Añade clase cuando se abre como app en iOS */
 if (window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
-// Registrar SW
+
+/* Registrar Service Worker */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/service-worker.js', {
       scope: '/',
       updateViaCache: 'none'
     }).then(function(registration) {
-      console.log('SW registered: ', registration);
+      console.log('SW registered:', registration);
     }).catch(function(err) {
-      console.log('SW registration failed: ', err);
+      console.log('SW registration failed:', err);
     });
   });
 }
 
+/* ========= Matomo ========= */
 var _paq = window._paq = window._paq || [];
-_paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
-// Matomo
+
+/* Si usas varios dominios, lista aquí los que quieras medir con la misma propiedad */
+_paq.push(['setDomains', ['*.inventarioeljueves.app','web-production-a1a43.up.railway.app']]);
+
+/* Métricas básicas */
+_paq.push(['trackPageView']);
+_paq.push(['enableLinkTracking']);
+
+/* Evento para saber si abren como PWA o navegador */
+(function () {
+  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
+  _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
+})();
+
+/* Carga del tracker */
 (function() {
   var u="https://inventarioeljueves.matomo.cloud/";
   _paq.push(['setTrackerUrl', u+'matomo.php']);
-  _paq.push(['setSiteId', '1']);
+  _paq.push(['setSiteId', '1']); // <-- tu Site ID
   var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
   g.async=true; g.src='https://cdn.matomo.cloud/inventarioeljueves.matomo.cloud/matomo.js';
   s.parentNode.insertBefore(g,s);
 })();
 
-// Debug badge
+/* Badge de depuración: muestra si está en standalone */
 (function () {
-  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
-  var badge = document.createElement('div');
-  badge.textContent = 'standalone: ' + standalone;
-  badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
-  document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(badge); });
+  var mk = function() {
+    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
+    var badge = document.createElement('div');
+    badge.textContent = 'standalone: ' + standalone;
+    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
+    document.body.appendChild(badge);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mk);
+  } else {
+    mk();
+  }
 })();
 </script>
 """)
+
 
 # ---------- DB ----------
 DB_DSN = (
