@@ -834,27 +834,6 @@ async def index(request: Request):
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
 
 
-<html lang="es"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<link rel="manifest" href="/manifest.webmanifest">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PWA test</title>
-<style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#0a2540;color:#fff;font:16px -apple-system,system-ui}</style>
-</head><body>
-<h1>PWA minimal</h1>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const standalone = (matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
-  const badge = document.createElement('div');
-  badge.textContent = 'standalone: ' + standalone;
-  badge.style = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;border-radius:6px;z-index:2147483647';
-  document.body.appendChild(badge);
-});
-</script>
-</body></html>"""
-    return Response(html_doc, media_type='text/html; charset=utf-8')
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
