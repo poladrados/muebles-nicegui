@@ -137,12 +137,11 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   g.async=true; g.src='https://cdn.matomo.cloud/inventarioeljueves.matomo.cloud/matomo.js';
   s.parentNode.insertBefore(g,s);
 })();
-</script>
-""")
-<script>
+
   console.log('display-mode standalone?', matchMedia('(display-mode: standalone)').matches);
   console.log('iOS standalone?', !!window.navigator.standalone);
 </script>
+""")
 
 # ---------- DB ----------
 DB_DSN = (
