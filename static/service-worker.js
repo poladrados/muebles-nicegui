@@ -1,34 +1,64 @@
-const CACHE='eljueves-v3';
-const PRECACHE=[
-  '/', '/?source=pwa',
+const CACHE = 'eljueves-v4';
+const PRECACHE = [
+  '/',
+  '/?source=pwa',
   '/muebles-app/manifest.json',
   '/muebles-app/images/icon-192.png',
   '/muebles-app/images/icon-512.png',
   '/muebles-app/images/maskable-192.png',
   '/muebles-app/images/maskable-512.png',
-  '/muebles-app/images/apple-touch-icon.png', // correcto
-  '/apple-touch-icon.png'                      // alias raíz
+  '/muebles-app/images/apple-touch-icon.png',
+  '/apple-touch-icon.png',
+  '/favicon.ico'
 ];
 
-self.addEventListener('install',e=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(PRECACHE)));
-  self.skipWaiting();
-});
-self.addEventListener('activate',e=>{
-  e.waitUntil(self.clients.claim().then(async()=>{
-    const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
-  }));
-});
-self.addEventListener('fetch',e=>{
-  const r=e.request;
-  if (r.method!=='GET') return;
-  if (r.destination==='image'){
-    e.respondWith(caches.match(r).then(m=>m||fetch(r).then(resp=>{
-      const cp=resp.clone(); caches.open(CACHE).then(c=>c.put(r,cp)); return resp;
-    })));
-    return;
-  }
-  e.respondWith(fetch(r).catch(()=>caches.match(r)));
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
+  );
 });
 
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    self.clients.claim().then(async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter(k => k !== CACHE)
+            .map(k => caches.delete(k))
+      );
+    })
+  );
+});
+
+self.addEventListener('fetch', e => {
+  const request = e.request;
+  
+  // No cachear solicitudes POST o no GET
+  if (request.method !== 'GET') return;
+  
+  // Estrategia: Cache First para assets, Network First para datos
+  if (request.url.includes('/img/') || request.url.includes('/muebles-app/')) {
+    e.respondWith(
+      caches.match(request).then(cached => {
+        return cached || fetch(request).then(response => {
+          // No cachear respuestas que no sean OK
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+          const responseToCache = response.clone();
+          caches.open(CACHE).then(cache => {
+            cache.put(request, responseToCache);
+          });
+          return response;
+        });
+      })
+    );
+  } else {
+    // Para otras solicitudes, intentar network primero
+    e.respondWith(
+      fetch(request).catch(() => caches.match(request))
+    );
+  }
+});

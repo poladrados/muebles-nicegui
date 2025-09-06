@@ -26,7 +26,6 @@ try:
 except Exception:
     pass
 
-# ---------- HEAD (manifest + iconos + fuente + matomo + CSS responsive) ----------
 ui.add_head_html("""
 <link rel="manifest" href="/muebles-app/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
@@ -35,15 +34,56 @@ ui.add_head_html("""
 <link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" href="/muebles-app/images/apple-touch-icon.png">
 <meta name="theme-color" content="#023e8a">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
-<!-- iOS PWA -->
+<!-- iOS PWA - Configuración mejorada -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-touch-startup-image" content="/muebles-app/images/apple-touch-icon.png">
+<meta name="format-detection" content="telephone=no">
 
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<!-- Prevenir zoom en inputs -->
 <style>
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Modo PWA standalone */
+  .pwa-standalone body {
+    margin: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow: hidden;
+  }
+
+  .pwa-standalone header {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Ocultar elementos de navegación en modo PWA */
+  @media all and (display-mode: standalone) {
+    body {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Prevenir bounce scroll en iOS */
+    html, body {
+      overscroll-behavior: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+  }
+
+  @media (max-width: 640px) {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+  }
+
   /* pares clave-valor (etiquetas en negrita) */
   .kv{margin:0;}
   .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
@@ -63,7 +103,29 @@ ui.add_head_html("""
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
 </style>
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+
 <script>
+// Script para modo standalone
+if (window.navigator.standalone === true) {
+  document.documentElement.classList.add('pwa-standalone');
+}
+
+// Registrar service worker mejorado
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/service-worker.js', { 
+      scope: '/',
+      updateViaCache: 'none'
+    }).then(function(registration) {
+      console.log('SW registered: ', registration);
+    }).catch(function(registrationError) {
+      console.log('SW registration failed: ', registrationError);
+    });
+  });
+}
+
 var _paq = window._paq = window._paq || [];
 _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
 // Matomo
@@ -77,7 +139,6 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
 })();
 </script>
 """)
-
 # ---------- DB ----------
 DB_DSN = (
     f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
