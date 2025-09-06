@@ -323,7 +323,8 @@ def _head_root():
 @app.head('/o/{mid}', include_in_schema=False)
 def _head_og(mid: int):
     return Response(status_code=200)
-# === Página mínima para probar instalación iOS (badge standalone) ===
+
+# === Página mínima / launcher para iOS ===
 @app.get('/pwa-min', include_in_schema=False)
 def pwa_min():
     return HTMLResponse("""<!doctype html>
@@ -340,17 +341,22 @@ def pwa_min():
 <style>
   html,body{height:100%;margin:0;background:#0e2a44;color:#fff;
             display:flex;align-items:center;justify-content:center;font:700 40px/1.2 system-ui}
+  .hint{position:fixed;bottom:10px;left:10px;font:12px/1 monospace;background:#111;color:#0f0;padding:6px 8px;border-radius:6px}
 </style>
 </head>
 <body>
   PWA minimal
+  <div id="badge" class="hint">standalone: …</div>
   <script>
   (function () {
     var standalone = matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
-    var badge = document.createElement('div');
-    badge.textContent = 'standalone: ' + standalone;
-    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
-    document.body.appendChild(badge);
+    document.getElementById('badge').textContent = 'standalone: ' + standalone;
+
+    // Si ya estamos en modo app, lanzar la app real
+    if (standalone) {
+      // pequeño retardo para que iOS no “peste” con el arranque
+      setTimeout(function(){ location.replace('/?a2hs=1'); }, 300);
+    }
   })();
   </script>
 </body>
