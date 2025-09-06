@@ -4,7 +4,7 @@
 from nicegui import ui, app
 from fastapi import Response, Request, status
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse, RedirectResponse
+from starlette.responses import FileResponse, RedirectResponse, HTMLResponse
 import asyncpg
 import os, base64, urllib.parse, hashlib, hmac, asyncio, html, math
 from functools import partial
@@ -315,6 +315,46 @@ def _root_manifest():
         os.path.join('static', 'manifest.json'),
         media_type='application/manifest+json; charset=utf-8'
     )
+# === HEAD para raíz y /o/{id} (evita 405 con HEAD) ===
+@app.head('/', include_in_schema=False)
+def _head_root():
+    return Response(status_code=200)
+
+@app.head('/o/{mid}', include_in_schema=False)
+def _head_og(mid: int):
+    return Response(status_code=200)
+# === Página mínima para probar instalación iOS (badge standalone) ===
+@app.get('/pwa-min', include_in_schema=False)
+def pwa_min():
+    return HTMLResponse("""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>PWA minimal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<link rel="manifest" href="/manifest.webmanifest?v=20250906">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#023e8a">
+<style>
+  html,body{height:100%;margin:0;background:#0e2a44;color:#fff;
+            display:flex;align-items:center;justify-content:center;font:700 40px/1.2 system-ui}
+</style>
+</head>
+<body>
+  PWA minimal
+  <script>
+  (function () {
+    var standalone = matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+    var badge = document.createElement('div');
+    badge.textContent = 'standalone: ' + standalone;
+    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
+    document.body.appendChild(badge);
+  })();
+  </script>
+</body>
+</html>""")
 
 # === Página SSR con OG: /o/{id} ===
 @app.get('/o/{mid}')
