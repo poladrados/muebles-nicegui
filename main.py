@@ -1,4 +1,4 @@
-# main.py — Inventario El Jueves (NiceGUI + asyncpg)
+# main.py — Inventario El Jueves (NiceGUI + asyncpg) 
 # PWA fixed: manifest en raíz, origen auto, sin saltos, test /pwa-min, SW sin cachear '/'
 
 from nicegui import ui, app
@@ -150,6 +150,8 @@ async def startup():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_vendido_tienda ON muebles (vendido, tienda)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_tipo ON muebles (tipo)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_lower_nombre ON muebles (LOWER(nombre))")
+        # Índice funcional para filtro por tipo case-insensitive + trim
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_tipo_norm ON muebles ((LOWER(TRIM(tipo))))")
 
 @app.on_shutdown
 async def shutdown():
@@ -424,8 +426,9 @@ async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
         where.append(f'vendido = ${len(params)+1}'); params.append(vendidos)
     if tienda and tienda!='Todas':
         where.append(f'tienda = ${len(params)+1}'); params.append(tienda)
+    # --- Filtro tipo: case-insensitive + TRIM ---
     if tipo and tipo != 'Todos':
-        where.append(f'TRIM(tipo) = ${len(params)+1}'); params.append(tipo.strip())
+        where.append(f'LOWER(TRIM(tipo)) = ${len(params)+1}'); params.append(tipo.strip().lower())
     if nombre_like:
         where.append(f'LOWER(nombre) LIKE ${len(params)+1}'); params.append(f'%{nombre_like.lower()}%')
     order_sql = {'Más reciente':'id DESC','Más antiguo':'id ASC','Precio ↑':'precio ASC NULLS LAST','Precio ↓':'precio DESC NULLS LAST'}.get(orden,'id DESC')
@@ -629,7 +632,7 @@ LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    if os.path.exists(os.path.join('static', 'service-worker.js')):
+    if os.path.exists(os.path.join('static', 'service-worker.js'))):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
@@ -743,11 +746,30 @@ async def index(request: Request):
             def reset_offsets():
                 app.storage.user['off_unsold'] = 0
 
-            async def cargar_tanda(vendidos_flag: bool, container: ui.element, off_key: str):
+            # -------- Token de refresco: último gana --------
+            def _new_rt():
+                """Genera y guarda un 'refresh token' para invalidar renders antiguos."""
+                rt = int(app.storage.user.get('rt', 0)) + 1
+                app.storage.user['rt'] = rt
+                return rt
+
+            def _is_current_rt(rt: int) -> bool:
+                return app.storage.user.get('rt') == rt
+
+            async def cargar_tanda(vendidos_flag: bool, container: ui.element, off_key: str, rt: int):
+                # Si ya hay un refresco más nuevo, abortamos
+                if not _is_current_rt(rt):
+                    return False
+
                 offset = int(app.storage.user.get(off_key, 0))
                 rows = await query_muebles(vendidos=vendidos_flag, tienda=filtro_tienda.value,
                                            tipo=filtro_tipo.value, nombre_like=filtro_nombre.value,
                                            orden=orden.value, limit=PAGE_SIZE+1, offset=offset)
+
+                # Revalidar token antes de pintar
+                if not _is_current_rt(rt):
+                    return False
+
                 has_more = len(rows) > PAGE_SIZE
                 with container:
                     await pintar_listado(vendidos=vendidos_flag, nombre_like=filtro_nombre.value,
@@ -758,16 +780,17 @@ async def index(request: Request):
 
             async def refrescar(*_):
                 reset_offsets()
+                rt = _new_rt()
                 cont.clear(); list_unsold.clear()
                 with cont:
                     with list_unsold:
-                        has_more_unsold = await cargar_tanda(False, list_unsold, 'off_unsold')
+                        has_more_unsold = await cargar_tanda(False, list_unsold, 'off_unsold', rt)
                         if has_more_unsold:
                             row_more = ui.row().style('justify-content:center; margin:12px 0;')
                             def more_unsold():
                                 async def go():
                                     row_more.clear()
-                                    hm = await cargar_tanda(False, list_unsold, 'off_unsold')
+                                    hm = await cargar_tanda(False, list_unsold, 'off_unsold', rt)
                                     if hm:
                                         with row_more: ui.button('Cargar más', on_click=more_unsold)
                                 asyncio.create_task(go())
