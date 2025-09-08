@@ -92,12 +92,9 @@ ui.add_head_html("""
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
 <script>
-/* Añade clase cuando se abre como app en iOS */
 if (window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
-
-/* Registrar Service Worker */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/service-worker.js', {
@@ -110,35 +107,23 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
-
-  /* ========= Matomo ========= */
-  var _paq = window._paq = window._paq || [];
-
-  /* Atribución multi-dominio (ajusta la lista a tus hosts) */
-  _paq.push(['setCookieDomain', '*.web-production-a1a43.up.railway.app']);
-  _paq.push(['setDomains', ['*.web-production-a1a43.up.railway.app','*.inventarioeljueves.app']]); // quita el 2º si no lo usas aún
-
-  /* Métricas básicas */
-  _paq.push(['trackPageView']);
-  _paq.push(['enableLinkTracking']);
-
-/* Carga del tracker (usa tu subdominio Matomo Cloud e idSite) */
-  (function() {
-    var u='https://webproductiona1a43uprailwayapp.matomo.cloud/';
-    _paq.push(['setTrackerUrl', u+'matomo.php']);
-    _paq.push(['setSiteId','1']);  // <--- pon aquí tu idSite real
-    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-    g.async=true; g.src='https://cdn.matomo.cloud/webproductiona1a43uprailwayapp.matomo.cloud/matomo.js';
-    s.parentNode.insertBefore(g,s);
-  })();
-
-  /* Evento: ¿app (standalone) o navegador? */
-  window.addEventListener('load', function () {
-    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
-    _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
-  });
-
-/* Badge de depuración: muestra si está en standalone */
+var _paq = window._paq = window._paq || [];
+_paq.push(['setCookieDomain', '*.web-production-a1a43.up.railway.app']);
+_paq.push(['setDomains', ['*.web-production-a1a43.up.railway.app','*.inventarioeljueves.app']]);
+_paq.push(['trackPageView']);
+_paq.push(['enableLinkTracking']);
+(function() {
+  var u='https://webproductiona1a43uprailwayapp.matomo.cloud/';
+  _paq.push(['setTrackerUrl', u+'matomo.php']);
+  _paq.push(['setSiteId','1']);
+  var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+  g.async=true; g.src='https://cdn.matomo.cloud/webproductiona1a43uprailwayapp.matomo.cloud/matomo.js';
+  s.parentNode.insertBefore(g,s);
+})();
+window.addEventListener('load', function () {
+  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
+  _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
+});
 (function () {
   var mk = function() {
     var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
@@ -147,11 +132,7 @@ if ('serviceWorker' in navigator) {
     badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
     document.body.appendChild(badge);
   };
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mk);
-  } else {
-    mk();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mk); else mk();
 })();
 </script>
 """)
@@ -358,44 +339,6 @@ def _head_root():
 def _head_og(mid: int):
     return Response(status_code=200)
 
-# === Página mínima / launcher para iOS ===
-@app.get('/pwa-min', include_in_schema=False)
-def pwa_min():
-    return HTMLResponse("""<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<title>PWA minimal</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<link rel="manifest" href="/manifest.webmanifest?v=20250906">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#023e8a">
-<style>
-  html,body{height:100%;margin:0;background:#0e2a44;color:#fff;
-            display:flex;align-items:center;justify-content:center;font:700 40px/1.2 system-ui}
-  .hint{position:fixed;bottom:10px;left:10px;font:12px/1 monospace;background:#111;color:#0f0;padding:6px 8px;border-radius:6px}
-</style>
-</head>
-<body>
-  PWA minimal
-  <div id="badge" class="hint">standalone: …</div>
-  <script>
-  (function () {
-    var standalone = matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
-    document.getElementById('badge').textContent = 'standalone: ' + standalone;
-
-    // Si ya estamos en modo app, lanzar la app real
-    if (standalone) {
-      // pequeño retardo para que iOS no “peste” con el arranque
-      setTimeout(function(){ location.replace('/?a2hs=1'); }, 300);
-    }
-  })();
-  </script>
-</body>
-</html>""")
-
 # === Página SSR con OG: /o/{id} ===
 @app.get('/o/{mid}')
 async def og_page(request: Request, mid: int):
@@ -456,6 +399,7 @@ async def og_page(request: Request, mid: int):
 
 # ---------- DB helpers ----------
 async def query_tipos():
+    """Devuelve SOLO los tipos existentes en DB, sin duplicados ni vacíos."""
     async with app.state.pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT DISTINCT TRIM(tipo) AS tipo
@@ -463,19 +407,15 @@ async def query_tipos():
             WHERE tipo IS NOT NULL AND TRIM(tipo) <> ''
             ORDER BY 1
         """)
-    # deduplicar ignorando mayúsc/minúsc pero conservando la forma vista
-    vistos = {}
-    for t in [r['tipo'] for r in rows if r['tipo']]:
-        k = t.strip()
-        if k.lower() not in vistos:
-            vistos[k.lower()] = k
-    for t in TIPOS:
-        k = t.strip()
-        if k and k.lower() not in vistos:
-            vistos[k.lower()] = k
-    # orden alfabético agradable
-    opciones = ['Todos'] + sorted(vistos.values(), key=lambda s: s.casefold())
-    return opciones
+    vistos = []
+    seen = set()
+    for r in rows:
+        t = (r['tipo'] or '').strip()
+        k = t.casefold()
+        if t and k not in seen:
+            vistos.append(t)
+            seen.add(k)
+    return vistos  # p.ej. ['Armario', 'Mesa', 'Espejo']
 
 async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
                         nombre_like:str|None, orden:str, limit:int|None=None, offset:int|None=None):
@@ -485,7 +425,7 @@ async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
     if tienda and tienda!='Todas':
         where.append(f'tienda = ${len(params)+1}'); params.append(tienda)
     if tipo and tipo != 'Todos':
-        where.append(f'tipo = ${len(params)+1}'); params.append(tipo)
+        where.append(f'TRIM(tipo) = ${len(params)+1}'); params.append(tipo.strip())
     if nombre_like:
         where.append(f'LOWER(nombre) LIKE ${len(params)+1}'); params.append(f'%{nombre_like.lower()}%')
     order_sql = {'Más reciente':'id DESC','Más antiguo':'id ASC','Precio ↑':'precio ASC NULLS LAST','Precio ↓':'precio DESC NULLS LAST'}.get(orden,'id DESC')
@@ -649,7 +589,6 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         else:
                             _kv_desc(desc)
 
-                    # URL absoluta del compartir (mismo host que el de la sesión)
                     share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
                     with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
                         ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
@@ -658,7 +597,6 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
                             ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
 
-                            # "Vendido" ahora ELIMINA directamente el mueble
                             async def mark_sold_delete(_=None, _mid=mid):
                                 await delete_mueble(_mid); ui.run_javascript('location.reload()')
                             ui.button('✓ Vendido', on_click=mark_sold_delete)
@@ -691,7 +629,6 @@ LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    # Registrar SW si existe
     if os.path.exists(os.path.join('static', 'service-worker.js')):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
@@ -699,9 +636,8 @@ async def index(request: Request):
         }
         """)
 
-    base_origin = _origin_from(request)  # <- mismo host
+    base_origin = _origin_from(request)
 
-    # Si llega con ?id=... renderiza ese mueble
     item_id = request.query_params.get('id')
     if item_id:
         try: mid = int(item_id)
@@ -713,7 +649,6 @@ async def index(request: Request):
                                  base_origin=base_origin)
         return
 
-    # Drawer admin
     with ui.left_drawer(value=False) as drawer:
         drawer.props('overlay')
         ui.button(on_click=lambda: drawer.set_value(False)).props('icon=close flat round').classes('absolute right-2 top-2')
@@ -738,7 +673,6 @@ async def index(request: Request):
                 drawer.set_value(False); ui.run_javascript('location.reload()')
             ui.button('Salir', on_click=do_logout).props('flat')
 
-            # Stats + CSV + Alta
             stats_box = ui.column().classes('q-mt-md')
             async def cargar_stats():
                 stats_box.clear()
@@ -783,26 +717,25 @@ async def index(request: Request):
             with ui.row().style('gap:12px; margin-bottom:16px;'):
                 filtro_nombre = ui.input('Buscar por nombre').props('clearable')
                 filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda')
+                # SIEMPRE visible con opción 'Todos'
                 filtro_tipo = ui.select(['Todos'], value='Todos', label='Filtrar por tipo')
                 orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por')
 
             async def init_tipos():
-                opts = await query_tipos()
-
-                # Carga de opciones en formato {label, value} (fiable con QSelect)
-                options = [{'label': t, 'value': t} for t in opts]
-
-                # Algunas versiones usan set_options; en otras, asignación directa.
+                # Obtener tipos actuales de la DB
+                tipos_actuales = await query_tipos()  # p.ej. ['Armario','Mesa','Espejo']
+                options = ['Todos'] + [t for t in tipos_actuales if t != 'Todos']
+                # Asignar opciones (sin set_options para máxima compatibilidad)
+                filtro_tipo.options = options
                 try:
-                    filtro_tipo.set_options(options)
-                except AttributeError:
-                    filtro_tipo.options = options
-
-                # Asegura un valor válido tras cambiar las opciones
-                if filtro_tipo.value not in opts:
+                    filtro_tipo.update()
+                except Exception:
+                    pass
+                # Asegurar un valor válido
+                if filtro_tipo.value not in options:
                     filtro_tipo.value = 'Todos'
-
-            ui.timer(0.05, lambda: asyncio.create_task(init_tipos()), once=True)
+                # Refrescar listado tras cargar los tipos
+                await refrescar()
 
             cont = ui.column()
             list_unsold = ui.column()
@@ -842,7 +775,11 @@ async def index(request: Request):
 
             for comp in (filtro_nombre, filtro_tienda, filtro_tipo, orden):
                 comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
+
+            # 1) Pinta listado inicial
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
+            # 2) Carga los tipos desde DB y actualiza el select (mantiene visible el control)
+            ui.timer(0.1, lambda: asyncio.create_task(init_tipos()), once=True)
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
@@ -853,6 +790,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
