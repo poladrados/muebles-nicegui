@@ -457,9 +457,25 @@ async def og_page(request: Request, mid: int):
 # ---------- DB helpers ----------
 async def query_tipos():
     async with app.state.pool.acquire() as conn:
-        rows = await conn.fetch("SELECT DISTINCT tipo FROM muebles ORDER BY tipo")
-    existentes = [r['tipo'] for r in rows if r['tipo']]
-    return ['Todos'] + sorted(set(existentes + TIPOS))
+        rows = await conn.fetch("""
+            SELECT DISTINCT TRIM(tipo) AS tipo
+            FROM muebles
+            WHERE tipo IS NOT NULL AND TRIM(tipo) <> ''
+            ORDER BY 1
+        """)
+    # deduplicar ignorando mayúsc/minúsc pero conservando la forma vista
+    vistos = {}
+    for t in [r['tipo'] for r in rows if r['tipo']]:
+        k = t.strip()
+        if k.lower() not in vistos:
+            vistos[k.lower()] = k
+    for t in TIPOS:
+        k = t.strip()
+        if k and k.lower() not in vistos:
+            vistos[k.lower()] = k
+    # orden alfabético agradable
+    opciones = ['Todos'] + sorted(vistos.values(), key=lambda s: s.casefold())
+    return opciones
 
 async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
                         nombre_like:str|None, orden:str, limit:int|None=None, offset:int|None=None):
@@ -771,7 +787,13 @@ async def index(request: Request):
                 orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por')
 
             async def init_tipos():
-                filtro_tipo.options = await query_tipos()
+    		opts = await query_tipos()
+    		# usa formato {label, value} que QSelect maneja de forma más fiable
+    		filtro_tipo.set_options([{'label': t, 'value': t} for t in opts])
+    		# si el valor actual no está en opciones, fuerza 'Todos'
+    		if filtro_tipo.value not in opts:
+        		filtro_tipo.value = 'Todos'
+
             ui.timer(0.05, lambda: asyncio.create_task(init_tipos()), once=True)
 
             cont = ui.column()
