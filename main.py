@@ -787,12 +787,20 @@ async def index(request: Request):
                 orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por')
 
             async def init_tipos():
-    		opts = await query_tipos()
-    		# usa formato {label, value} que QSelect maneja de forma más fiable
-    		filtro_tipo.set_options([{'label': t, 'value': t} for t in opts])
-    		# si el valor actual no está en opciones, fuerza 'Todos'
-    		if filtro_tipo.value not in opts:
-        		filtro_tipo.value = 'Todos'
+                opts = await query_tipos()
+
+                # Carga de opciones en formato {label, value} (fiable con QSelect)
+                options = [{'label': t, 'value': t} for t in opts]
+
+                # Algunas versiones usan set_options; en otras, asignación directa.
+                try:
+                    filtro_tipo.set_options(options)
+                except AttributeError:
+                    filtro_tipo.options = options
+
+                # Asegura un valor válido tras cambiar las opciones
+                if filtro_tipo.value not in opts:
+                    filtro_tipo.value = 'Todos'
 
             ui.timer(0.05, lambda: asyncio.create_task(init_tipos()), once=True)
 
