@@ -632,7 +632,7 @@ LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    if os.path.exists(os.path.join('static', 'service-worker.js'))):
+    if os.path.exists(os.path.join('static', 'service-worker.js')):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
