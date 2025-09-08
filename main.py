@@ -122,7 +122,7 @@ if ('serviceWorker' in navigator) {
   _paq.push(['trackPageView']);
   _paq.push(['enableLinkTracking']);
 
-  /* Carga del tracker (usa tu subdominio Matomo Cloud e idSite) */
+/* Carga del tracker (usa tu subdominio Matomo Cloud e idSite) */
   (function() {
     var u='https://webproductiona1a43uprailwayapp.matomo.cloud/';
     _paq.push(['setTrackerUrl', u+'matomo.php']);
@@ -155,7 +155,6 @@ if ('serviceWorker' in navigator) {
 })();
 </script>
 """)
-
 
 # ---------- DB ----------
 DB_DSN = (
@@ -642,9 +641,12 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                     if is_admin():
                         with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
                             ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
-                            async def toggle(_=None, _mid=mid, vendido=not m['vendido']):
-                                await set_vendido(_mid, vendido); ui.run_javascript('location.reload()')
-                            ui.button('✓ Vendido' if not m['vendido'] else '↩ Disponible', on_click=toggle)
+
+                            # "Vendido" ahora ELIMINA directamente el mueble
+                            async def mark_sold_delete(_=None, _mid=mid):
+                                await delete_mueble(_mid); ui.run_javascript('location.reload()')
+                            ui.button('✓ Vendido', on_click=mark_sold_delete)
+
                             def ask_delete_mueble(_=None, _mid=mid):
                                 with ui.dialog() as dd:
                                     with ui.card():
@@ -653,7 +655,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                             ui.button('Cancelar', on_click=dd.close).props('flat')
                                             async def do_delete(_=None):
                                                 await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
-                                            ui.button('Eliminar', color='negative', on_click=do_delete)
+                                            ui.button('🗑 Eliminar', color='negative', on_click=do_delete)
                                 dd.open()
                             ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
 
@@ -689,7 +691,6 @@ async def index(request: Request):
         try: mid = int(item_id)
         except: mid = None
         cont = ui.column()
-        list_unsold = ui.column(); list_sold = ui.column()
         with cont:
             await pintar_listado(vendidos=None, nombre_like=None, tienda=None, tipo=None,
                                  orden='Más reciente', only_id=mid if item_id else None,
@@ -728,12 +729,10 @@ async def index(request: Request):
                 async with app.state.pool.acquire() as conn:
                     en_rastro = await conn.fetchval("SELECT COUNT(*) FROM muebles WHERE vendido=FALSE AND tienda='El Rastro'")
                     en_regueros = await conn.fetchval("SELECT COUNT(*) FROM muebles WHERE vendido=FALSE AND tienda='Regueros'")
-                    vendidos = await conn.fetchval("SELECT COUNT(*) FROM muebles WHERE vendido=TRUE")
                 with stats_box:
                     ui.label('📊 Estadísticas').classes('text-subtitle1 q-mb-sm')
                     ui.label(f"🔵 En El Rastro: {en_rastro}")
                     ui.label(f"🔴 En Regueros: {en_regueros}")
-                    ui.label(f"💰 Vendidos: {vendidos}")
 
                     async def export_csv(_=None):
                         async with app.state.pool.acquire() as conn:
@@ -777,11 +776,9 @@ async def index(request: Request):
 
             cont = ui.column()
             list_unsold = ui.column()
-            list_sold = ui.column()
 
             def reset_offsets():
                 app.storage.user['off_unsold'] = 0
-                app.storage.user['off_sold'] = 0
 
             async def cargar_tanda(vendidos_flag: bool, container: ui.element, off_key: str):
                 offset = int(app.storage.user.get(off_key, 0))
@@ -798,7 +795,7 @@ async def index(request: Request):
 
             async def refrescar(*_):
                 reset_offsets()
-                cont.clear(); list_unsold.clear(); list_sold.clear()
+                cont.clear(); list_unsold.clear()
                 with cont:
                     with list_unsold:
                         has_more_unsold = await cargar_tanda(False, list_unsold, 'off_unsold')
@@ -813,27 +810,9 @@ async def index(request: Request):
                                 asyncio.create_task(go())
                             with row_more: ui.button('Cargar más', on_click=more_unsold)
 
-                    if is_admin():
-                        ui.separator()
-                        ui.label('✔ Vendidos').style('margin-top:8px; font-weight:600;')
-                        with list_sold:
-                            has_more_sold = await cargar_tanda(True, list_sold, 'off_sold')
-                            if has_more_sold:
-                                row_more_s = ui.row().style('justify-content:center; margin:12px 0;')
-                                def more_sold():
-                                    async def go():
-                                        row_more_s.clear()
-                                        hm = await cargar_tanda(True, list_sold, 'off_sold')
-                                        if hm:
-                                            with row_more_s: ui.button('Cargar más', on_click=more_sold)
-                                    asyncio.create_task(go())
-                                with row_more_s: ui.button('Cargar más', on_click=more_sold)
-
             for comp in (filtro_nombre, filtro_tienda, filtro_tipo, orden):
                 comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
-
-
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
@@ -844,7 +823,6 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
-
 
 
 
