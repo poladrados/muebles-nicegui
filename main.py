@@ -398,6 +398,74 @@ async def og_page(request: Request, mid: int):
 </body>
 </html>"""
     return Response(html_doc, media_type='text/html; charset=utf-8')
+# === PWA minimal bootstrap (/pwa-min) ===
+@app.get('/pwa-min', include_in_schema=False)
+def pwa_min():
+    html_doc = """<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inventario El Jueves • PWA</title>
+
+<link rel="manifest" href="/manifest.webmanifest?v=20250906">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
+<meta name="theme-color" content="#023e8a">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+
+<style>
+  html,body{height:100%;margin:0}
+  body{
+    display:flex;align-items:center;justify-content:center;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background:#E6F0F8;font:16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;color:#023e8a
+  }
+  .card{
+    background:#fff;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.08);
+    padding:20px 18px;max-width:460px;text-align:center
+  }
+  h1{font-weight:700;margin:0 0 6px}
+  p{margin:6px 0 16px;color:#334155}
+  a.btn{
+    display:inline-block;padding:10px 16px;border-radius:10px;text-decoration:none;
+    background:#023e8a;color:#fff;font-weight:600
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#475569;margin-top:8px}
+</style>
+
+<script>
+(function(){
+  // registra SW lo antes posible
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js', {scope:'/', updateViaCache:'none'}).catch(()=>{});
+  }
+  // tras breve pausa, redirige a la app (o a ?to=/ruta)
+  window.addEventListener('load', function(){
+    var params = new URLSearchParams(location.search);
+    var to = params.get('to') || '/';
+    setTimeout(function(){ location.replace(to); }, 400);
+  });
+})();
+</script>
+</head>
+<body>
+  <div class="card">
+    <h1>Instalando la PWA…</h1>
+    <p>Si tu navegador lo permite, verás la opción de <strong>Instalar app</strong>.<br>
+       También puedes <strong>Añadir a la pantalla de inicio</strong>.</p>
+    <a class="btn" href="/">Abrir app ahora</a>
+    <div class="mono">manifest desde /manifest.webmanifest · SW scope '/'</div>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(html_doc)
+
 
 # ---------- DB helpers ----------
 async def query_tipos():
