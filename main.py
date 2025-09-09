@@ -129,7 +129,7 @@ window.addEventListener('load', function () {
     var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
     var badge = document.createElement('div');
     badge.textContent = 'standalone: ' + standalone;
-    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';
+    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';pointer-events:none';
     document.body.appendChild(badge);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mk); else mk();
@@ -698,7 +698,6 @@ async def index(request: Request):
         return
 
     with ui.left_drawer(value=False) as drawer:
-        drawer.props('overlay')
         ui.button(on_click=lambda: drawer.set_value(False)).props('icon=close flat round').classes('absolute right-2 top-2')
         ui.label('Panel').classes('text-h6 q-pa-md')
 
