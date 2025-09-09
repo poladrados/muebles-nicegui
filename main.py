@@ -95,18 +95,23 @@ ui.add_head_html("""
 if (window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
+
+/* REGISTRO SW: solo si no hay controlador para evitar loops/reloads */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/service-worker.js', {
-      scope: '/',
-      updateViaCache: 'none'
-    }).then(function(registration) {
-      console.log('SW registered:', registration);
-    }).catch(function(err) {
-      console.log('SW registration failed:', err);
-    });
+    if (!navigator.serviceWorker.controller) {
+      navigator.serviceWorker.register('/service-worker.js', {
+        scope: '/',
+        updateViaCache: 'none'
+      }).then(function(registration) {
+        console.log('SW registered:', registration);
+      }).catch(function(err) {
+        console.log('SW registration failed:', err);
+      });
+    }
   });
 }
+
 var _paq = window._paq = window._paq || [];
 _paq.push(['setCookieDomain', '*.web-production-a1a43.up.railway.app']);
 _paq.push(['setDomains', ['*.web-production-a1a43.up.railway.app','*.inventarioeljueves.app']]);
@@ -120,16 +125,19 @@ _paq.push(['enableLinkTracking']);
   g.async=true; g.src='https://cdn.matomo.cloud/webproductiona1a43uprailwayapp.matomo.cloud/matomo.js';
   s.parentNode.insertBefore(g,s);
 })();
+
 window.addEventListener('load', function () {
   var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
   _paq.push(['trackEvent','PWA','display-mode', standalone ? 'standalone' : 'browser']);
 });
+
+/* Badge debug: corregido el cssText (ojo al ;pointer-events:none) */
 (function () {
   var mk = function() {
     var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
     var badge = document.createElement('div');
     badge.textContent = 'standalone: ' + standalone;
-    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999';pointer-events:none';
+    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999;pointer-events:none';
     document.body.appendChild(badge);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mk); else mk();
@@ -221,6 +229,7 @@ def _cache_headers(data: bytes):
 
 # ----- Formato ES (precio / fecha) -----
 import math
+
 def _fmt_precio(p):
     try:
         n = float(p)
@@ -236,6 +245,7 @@ def _fmt_precio(p):
         return f"{s_ent}{s_dec} €"
 
 from datetime import datetime
+
 def _parse_dt(dt):
     if isinstance(dt, datetime): return dt
     try: return datetime.fromisoformat(str(dt))
@@ -249,7 +259,8 @@ def _fmt_fecha(dt):
 @app.get('/img/{mueble_id}')
 async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
     async with app.state.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             SELECT imagen_base64 FROM imagenes_muebles
              WHERE mueble_id=$1
              ORDER BY es_principal DESC, id ASC
@@ -277,7 +288,7 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
-    raw = base64.b64decode(b64)
+    raw = base64.bdecode(b64) if hasattr(base64, 'bdecode') else base64.b64decode(b64)
     im = Image.open(BytesIO(raw))
     if im.mode not in ('RGB', 'RGBA'): im = im.convert('RGB')
     else: im = im.convert('RGB')
@@ -292,7 +303,8 @@ def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
 @app.get('/og_img/{mueble_id}.jpg')
 async def og_img(request: Request, mueble_id: int):
     async with app.state.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             SELECT imagen_base64 FROM imagenes_muebles
             WHERE mueble_id=$1
             ORDER BY es_principal DESC, id ASC
@@ -443,12 +455,14 @@ def pwa_min():
 async def query_tipos():
     """Devuelve SOLO los tipos existentes en DB, sin duplicados ni vacíos."""
     async with app.state.pool.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT DISTINCT TRIM(tipo) AS tipo
             FROM muebles
             WHERE tipo IS NOT NULL AND TRIM(tipo) <> ''
             ORDER BY 1
-        """)
+        """
+        )
     vistos = []
     seen = set()
     for r in rows:
@@ -493,18 +507,20 @@ async def get_mueble(mueble_id: int):
 async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
-            mid = await conn.fetchval("""
+            mid = await conn.fetchval(
+                """
                 INSERT INTO muebles (nombre, precio, descripcion, tienda, tipo, fecha,
                     alto,largo,fondo,diametro,diametro_base,diametro_boca,alto_respaldo,alto_asiento,ancho,vendido)
                 VALUES ($1,$2,$3,$4,$5, NOW(),
                         $6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                 RETURNING id
-            """, data.get('nombre'), data.get('precio'), data.get('descripcion'),
-                 data.get('tienda'), data.get('tipo'),
-                 data.get('alto'), data.get('largo'), data.get('fondo'),
-                 data.get('diametro'), data.get('diametro_base'), data.get('diametro_boca'),
-                 data.get('alto_respaldo'), data.get('alto_asiento'), data.get('ancho'),
-                 False)
+            """,
+                data.get('nombre'), data.get('precio'), data.get('descripcion'),
+                data.get('tienda'), data.get('tipo'),
+                data.get('alto'), data.get('largo'), data.get('fondo'),
+                data.get('diametro'), data.get('diametro_base'), data.get('diametro_boca'),
+                data.get('alto_respaldo'), data.get('alto_asiento'), data.get('ancho'),
+                False)
             for i, b in enumerate(images_bytes):
                 b_webp = to_webp_bytes(b)
                 b64 = base64.b64encode(b_webp).decode('utf-8')
@@ -559,6 +575,7 @@ async def set_principal_image(mueble_id: int, img_id: int):
                                img_id, mueble_id)
 
 # ---------- Listado (diseño + admin) ----------
+
 def _safe(s: str) -> str:
     return html.escape(s or "")
 
@@ -611,10 +628,11 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
                         big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
 
+                    # Handler robusto: captura explícita de referencias
                     ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
                         .props('loading=lazy alt="Imagen principal"')\
                         .classes('card-thumb')\
-                        .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
+                        .on('click', lambda *_h, b=big, mv=mid, d=dialog: open_with(0, b, mv, d))
 
                 with ui.element('div').classes('card-details'):
                     _kv_attr('Tipo', _safe(m.get('tipo','')))
@@ -640,9 +658,10 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
                             ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
 
-                            async def mark_sold_delete(_=None, _mid=mid):
-                                await delete_mueble(_mid); ui.run_javascript('location.reload()')
-                            ui.button('✓ Vendido', on_click=mark_sold_delete)
+                            async def toggle(_=None, _mid=mid, vendido=not m['vendido']):
+                                await set_vendido(_mid, vendido)
+                                ui.run_javascript('location.reload()')
+                            ui.button('✓ Vendido' if not m['vendido'] else '↩ Disponible', on_click=toggle)
 
                             def ask_delete_mueble(_=None, _mid=mid):
                                 with ui.dialog() as dd:
@@ -665,24 +684,14 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
                           .props('loading=lazy alt="Miniatura"')\
                           .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
-                          .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+                          .on('click', lambda *_h, j=i, b=big, mv=mid, d=dialog: open_with(j, b, mv, d))
 
 # ---------- Página ----------
 LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
-    if os.path.exists(os.path.join('static', 'service-worker.js')):
-        ui.run_javascript("""
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistration('/').then(function(reg){
-            if (!reg) {
-              navigator.serviceWorker.register('/service-worker.js', {scope:'/'})
-                .catch(()=>{});
-            }
-          });
-        }
-        """)
+    # (El registro del SW se hace en el <head> para evitar duplicados y recargas)
 
     base_origin = _origin_from(request)
 
