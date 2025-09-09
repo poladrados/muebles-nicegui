@@ -675,7 +675,12 @@ async def index(request: Request):
     if os.path.exists(os.path.join('static', 'service-worker.js')):
         ui.run_javascript("""
         if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/service-worker.js', {scope:'/'}).catch(()=>{});
+          navigator.serviceWorker.getRegistration('/').then(function(reg){
+            if (!reg) {
+              navigator.serviceWorker.register('/service-worker.js', {scope:'/'})
+                .catch(()=>{});
+            }
+          });
         }
         """)
 
@@ -853,6 +858,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
