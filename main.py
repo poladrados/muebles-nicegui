@@ -1,5 +1,5 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
-# Fixes: desactiva y limpia Service Worker para evitar recargas, ancla miniaturas, botones admin operativos (stub de diálogos)
+# Fixes: desactiva y limpia Service Worker para evitar recargas, ancla miniaturas, botones admin operativos (diálogos completos + 'Vendido' = eliminar)
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
@@ -90,6 +90,7 @@ if (window.navigator.standalone === true) {
 
 var _paq = window._paq = window._paq || [];
 _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
+// Matomo
 (function() {
   var u="https://inventarioeljueves.matomo.cloud/";
   _paq.push(['setTrackerUrl', u+'matomo.php']);
@@ -331,35 +332,35 @@ async def og_page(request: Request, mid: int):
         return RedirectResponse(url=human_url, status_code=302)
 
     html_doc = f"""<!doctype html>
-<html lang=\"es\">
+<html lang="es">
 <head>
-<meta charset=\"utf-8\">
+<meta charset="utf-8">
 <title>{_esc(title)}</title>
 
-<link rel=\"manifest\" href=\"/manifest.webmanifest?v=20250906\">
-<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/muebles-app/images/apple-touch-icon.png\">
-<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
-<meta name=\"apple-mobile-web-app-title\" content=\"Inventario El Jueves\">
-<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">
-<meta name=\"theme-color\" content=\"#023e8a\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no\">
+<link rel="manifest" href="/manifest.webmanifest?v=20250906">
+<link rel="apple-touch-icon" sizes="180x180" href="/muebles-app/images/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inventario El Jueves">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#023e8a">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
-<meta property=\"og:title\" content=\"{_esc(title)}\">
-<meta property=\"og:description\" content=\"{_esc(desc)}\">
-<meta property=\"og:image\" content=\"{img_url}\">
-<meta property=\"og:image:secure_url\" content=\"{img_url}\">
-<meta property=\"og:image:type\" content=\"image/jpeg\">
-<meta property=\"og:url\" content=\"{_esc(full_url)}\">
-<meta property=\"og:type\" content=\"website\">
-<meta property=\"og:site_name\" content=\"Inventario de Antigüedades El Jueves\">
+<meta property="og:title" content="{_esc(title)}">
+<meta property="og:description" content="{_esc(desc)}">
+<meta property="og:image" content="{img_url}">
+<meta property="og:image:secure_url" content="{img_url}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:url" content="{_esc(full_url)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Inventario de Antigüedades El Jueves">
 
-<meta name=\"twitter:card\" content=\"summary_large_image\">
-<meta name=\"twitter:title\" content=\"{_esc(title)}\">
-<meta name=\"twitter:description\" content=\"{_esc(desc)}\">
-<meta name=\"twitter:image\" content=\"{img_url}\">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_esc(title)}">
+<meta name="twitter:description" content="{_esc(desc)}">
+<meta name="twitter:image" content="{img_url}">
 </head>
 <body>
-<p>Vista previa para compartir <a href=\"{human_url}\">{_esc(title)}</a>.</p>
+<p>Vista previa para compartir <a href="{human_url}">{_esc(title)}</a>.</p>
 </body>
 </html>"""
     return Response(html_doc, media_type='text/html; charset=utf-8')
@@ -471,29 +472,140 @@ async def set_principal_image(mueble_id: int, img_id: int):
             await conn.execute('UPDATE imagenes_muebles SET es_principal=TRUE WHERE id=$1 AND mueble_id=$2',
                                img_id, mueble_id)
 
-# ---------- Diálogos mínimos (evita NameError y hace que los botones respondan) ----------
+# ---------- Diálogos admin (completos, traídos del código antiguo) ----------
 
 def dialog_add_mueble():
-    with ui.dialog() as d, ui.card():
-        ui.label('Añadir antigüedad').classes('text-h6')
-        ui.label('Formulario de alta pendiente de implementar completo aquí.').classes('text-grey')
-        with ui.row().classes('justify-end'):
-            ui.button('Cerrar', on_click=d.close)
+    with ui.dialog() as d, ui.card().classes('w-[min(92vw,900px)] max-h-[92vh] overflow-auto p-4'):
+        ui.label('Añadir nueva antigüedad').classes('text-xl font-bold')
+        with ui.grid(columns=2).classes('gap-3'):
+            tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
+            tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
+            nombre = ui.input('Nombre*')
+            precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
+        descripcion = ui.textarea('Descripción').classes('w-full')
+        ui.label('Medidas (rellena solo las que correspondan)').classes('mt-2 font-medium')
+        with ui.grid(columns=3).classes('gap-2'):
+            alto = ui.number(label='Alto (cm)', min=0)
+            largo = ui.number(label='Largo (cm)', min=0)
+            fondo = ui.number(label='Fondo (cm)', min=0)
+            diametro = ui.number(label='Diámetro (cm)', min=0)
+            diametro_base = ui.number(label='Ø Base (cm)', min=0)
+            diametro_boca = ui.number(label='Ø Boca (cm)', min=0)
+            alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
+            alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
+            ancho = ui.number(label='Ancho (cm)', min=0)
+        ui.label('Imágenes (la primera será principal)').classes('mt-2')
+        new_bytes: list[bytes] = []
+        async def on_upload(e):
+            new_bytes.append(await e.content.read())
+            ui.notify(f'Imagen subida ({len(new_bytes)})')
+        ui.upload(multiple=True, on_upload=on_upload)
+        async def guardar(_=None):
+            if not nombre.value or not precio.value or not new_bytes:
+                ui.notify('Completa nombre, precio y al menos una imagen', type='warning'); return
+            data = {
+                'nombre': nombre.value, 'precio': float(precio.value),
+                'descripcion': descripcion.value, 'tienda': tienda.value, 'tipo': tipo.value,
+                'alto': _none_if_empty_or_zero(alto.value), 'largo': _none_if_empty_or_zero(largo.value),
+                'fondo': _none_if_empty_or_zero(fondo.value), 'diametro': _none_if_empty_or_zero(diametro.value),
+                'diametro_base': _none_if_empty_or_zero(diametro_base.value),
+                'diametro_boca': _none_if_empty_or_zero(diametro_boca.value),
+                'alto_respaldo': _none_if_empty_or_zero(alto_respaldo.value),
+                'alto_asiento': _none_if_empty_or_zero(alto_asiento.value),
+                'ancho': _none_if_empty_or_zero(ancho.value),
+            }
+            await add_mueble(data, new_bytes)
+            ui.notify('¡Mueble añadido!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+        with ui.row().classes('justify-end mt-3'):
+            ui.button('Cancelar', on_click=d.close).props('flat')
+            ui.button('Guardar', on_click=guardar, color='primary')
     return d
 
-async def _load_mueble(mid: int):
-    try:
-        m, imgs = await get_mueble(mid)
-    except Exception:
-        m, imgs = None, []
-    return m, imgs
+def dialog_edit_mueble(mueble_id: int):
+    with ui.dialog() as d, ui.card().classes('w-[min(92vw,1000px)] max-h-[92vh] overflow-auto p-4'):
+        ui.label('Editar mueble').classes('text-xl font-bold')
+        cont = ui.column().classes('gap-3')
+        async def cargar_datos():
+            mueble, _ = await get_mueble(mueble_id)
+            cont.clear()
+            with cont:
+                with ui.grid(columns=2).classes('gap-3'):
+                    tienda = ui.select(['El Rastro', 'Regueros'], value=mueble['tienda'], label='Tienda')
+                    tipo = ui.select(TIPOS, value=mueble['tipo'] or 'Otro artículo', label='Tipo de mueble')
+                    nombre = ui.input('Nombre*', value=mueble['nombre'])
+                    precio = ui.number(label='Precio (€)*', value=float(mueble['precio'] or 0), format='%.2f', min=0)
+                descripcion = ui.textarea('Descripción', value=mueble.get('descripcion') or '').classes('w-full')
+                vendido_sw = ui.switch('Marcar como vendido', value=bool(mueble['vendido']))
+                with ui.grid(columns=3).classes('gap-2'):
+                    alto = ui.number(label='Alto (cm)', value=mueble.get('alto') or 0)
+                    largo = ui.number(label='Largo (cm)', value=mueble.get('largo') or 0)
+                    fondo = ui.number(label='Fondo (cm)', value=mueble.get('fondo') or 0)
+                    diametro = ui.number(label='Diámetro (cm)', value=mueble.get('diametro') or 0)
+                    diametro_base = ui.number(label='Ø Base (cm)', value=mueble.get('diametro_base') or 0)
+                    diametro_boca = ui.number(label='Ø Boca (cm)', value=mueble.get('diametro_boca') or 0)
+                    alto_respaldo = ui.number(label='Alto respaldo (cm)', value=mueble.get('alto_respaldo') or 0)
+                    alto_asiento = ui.number(label='Alto asiento (cm)', value=mueble.get('alto_asiento') or 0)
+                    ancho = ui.number(label='Ancho (cm)', value=mueble.get('ancho') or 0)
 
-def dialog_edit_mueble(mid: int):
-    with ui.dialog() as d, ui.card():
-        ui.label(f'Editar mueble #{mid}').classes('text-h6')
-        ui.label('Editor mínimo: pendiente de implementar edición completa.').classes('text-grey')
-        with ui.row().classes('justify-end'):
-            ui.button('Cerrar', on_click=d.close)
+                # Imágenes existentes
+                imgs = await app.state.pool.fetch(
+                    'SELECT id, es_principal FROM imagenes_muebles WHERE mueble_id=$1 ORDER BY es_principal DESC, id ASC',
+                    mueble_id
+                )
+                with ui.expansion(f'Imágenes ({len(imgs)})', value=True):
+                    with ui.row().classes('gap-3 flex-wrap'):
+                        for img in imgs:
+                            iid = int(img['id'])
+                            with ui.column().classes('items-center'):
+                                ui.image(f'/img_by_id/{iid}?thumb=1').classes('w-[140px] h-[140px] object-cover rounded')
+                                with ui.row().classes('gap-1'):
+                                    async def make_principal(_=None, _iid=iid):
+                                        await set_principal_image(mueble_id, _iid)
+                                        ui.notify('Principal actualizada', type='positive')
+                                        ui.run_javascript('location.reload()')
+                                    ui.button('⭐ Principal', on_click=make_principal).props('flat')
+                                    def ask_delete(_=None, _iid=iid):
+                                        with ui.dialog() as dd:
+                                            with ui.card():
+                                                ui.label('¿Eliminar imagen?')
+                                                with ui.row().classes('justify-end'):
+                                                    ui.button('Cancelar', on_click=dd.close).props('flat')
+                                                    async def do_del(_=None):
+                                                        await delete_image(_iid); dd.close(); ui.run_javascript('location.reload()')
+                                                    ui.button('Eliminar', color='negative', on_click=do_del)
+                                        dd.open()
+                                    ui.button('🗑 Eliminar', color='negative', on_click=ask_delete).props('flat')
+
+                # Añadir nuevas
+                ui.label('Añadir nuevas imágenes').classes('mt-2')
+                new_bytes: list[bytes] = []
+                async def on_upload(e):
+                    new_bytes.append(await e.content.read())
+                    ui.notify(f'Imagen subida ({len(new_bytes)})')
+                ui.upload(multiple=True, on_upload=on_upload)
+                with ui.row().classes('justify-end mt-3'):
+                    ui.button('Cancelar', on_click=d.close).props('flat')
+                    async def guardar(_=None):
+                        data = {
+                            'nombre': nombre.value, 'precio': float(precio.value or 0),
+                            'descripcion': descripcion.value, 'tienda': tienda.value, 'tipo': tipo.value,
+                            'vendido': bool(vendido_sw.value),
+                            'alto': _none_if_empty_or_zero(alto.value), 'largo': _none_if_empty_or_zero(largo.value),
+                            'fondo': _none_if_empty_or_zero(fondo.value), 'diametro': _none_if_empty_or_zero(diametro.value),
+                            'diametro_base': _none_if_empty_or_zero(diametro_base.value),
+                            'diametro_boca': _none_if_empty_or_zero(diametro_boca.value),
+                            'alto_respaldo': _none_if_empty_or_zero(alto_respaldo.value),
+                            'alto_asiento': _none_if_empty_or_zero(alto_asiento.value),
+                            'ancho': _none_if_empty_or_zero(ancho.value),
+                        }
+                        await update_mueble(mueble_id, data)
+                        if new_bytes:
+                            first_principal = (len(imgs) == 0)
+                            for i, raw in enumerate(new_bytes):
+                                await add_image(mueble_id, raw, will_be_principal=(first_principal and i == 0))
+                        ui.notify('¡Cambios guardados!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+                    ui.button('Guardar', on_click=guardar, color='primary')
+        ui.timer(0.05, cargar_datos, once=True)
     return d
 
 # ---------- Listado (diseño + admin) ----------
@@ -579,9 +691,8 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                     if is_admin():
                         with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
                             ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
-                            async def toggle(_=None, _mid=mid, vendido=not m['vendido']):
-                                await set_vendido(_mid, vendido); ui.run_javascript('location.reload()')
-                            ui.button('✓ Vendido' if not m['vendido'] else '↩ Disponible', on_click=toggle)
+
+                            # Usamos la MISMA confirmación de borrado para 'Vendido' y 'Eliminar'
                             def ask_delete_mueble(_=None, _mid=mid):
                                 with ui.dialog() as dd:
                                     with ui.card():
@@ -592,6 +703,9 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                                 await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
                                             ui.button('Eliminar', color='negative', on_click=do_delete)
                                 dd.open()
+
+                            # '✓ Vendido' = eliminar (misma confirmación)
+                            ui.button('✓ Vendido', on_click=ask_delete_mueble)
                             ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
 
         async with app.state.pool.acquire() as conn:
@@ -774,12 +888,12 @@ async def index(request: Request):
 @app.get('/pwa-min')
 def pwa_min():
     html_doc = """<!doctype html>
-<html lang=\"es\"><head>
-<meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no\">
-<link rel=\"manifest\" href=\"/manifest.webmanifest\">
-<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
-<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PWA test</title>
 <style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#0a2540;color:#fff;font:16px -apple-system,system-ui}</style>
 </head><body>
