@@ -885,30 +885,48 @@ async def index(request: Request):
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
 
 # ---------- Ruta PWA mínima para probar standalone ----------
-@app.get('/pwa-min')
+# ---------- Ruta PWA mínima / launcher para iOS y Android ----------
+@app.get('/pwa-min', include_in_schema=False)
 def pwa_min():
     html_doc = """<!doctype html>
-<html lang="es"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<link rel="manifest" href="/manifest.webmanifest">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PWA test</title>
-<style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#0a2540;color:#fff;font:16px -apple-system,system-ui}</style>
-</head><body>
-<h1>PWA minimal</h1>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const standalone = (matchMedia && matchMedia('(display-mode: standalone)').matches) || !!navigator.standalone;
-  const badge = document.createElement('div');
-  badge.textContent = 'standalone: ' + standalone;
-  badge.style = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;border-radius:6px;z-index:2147483647';
-  document.body.appendChild(badge);
-});
-</script>
-</body></html>"""
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>PWA minimal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <link rel="manifest" href="/manifest.webmanifest?v=20250906">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#023e8a">
+  <style>
+    html,body{height:100%;margin:0;background:#0e2a44;color:#fff;
+      display:flex;align-items:center;justify-content:center;font:700 40px/1.2 system-ui}
+    .hint{position:fixed;bottom:10px;left:10px;font:12px/1 monospace;background:#111;color:#0f0;
+      padding:6px 8px;border-radius:6px;z-index:2147483647}
+  </style>
+</head>
+<body>
+  PWA minimal
+  <div id="badge" class="hint">standalone: …</div>
+  <script>
+    (function () {
+      var isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
+
+      // badge de depuración
+      var el = document.getElementById('badge');
+      if (el) el.textContent = 'standalone: ' + isStandalone;
+
+      // Si ya está instalada/abierta como app, lanzar la app real (sin dejar historial)
+      if (isStandalone) {
+        setTimeout(function(){ location.replace('/?a2hs=1'); }, 250);
+      }
+    })();
+  </script>
+</body>
+</html>"""
     return Response(html_doc, media_type='text/html; charset=utf-8')
+
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
