@@ -514,37 +514,25 @@ def dialog_add_mueble():
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
                      .props('accept="image/*" max-file-size="52428800"')
 
+        # ======= ÚNICO CAMBIO: guardar sin validar nombre/precio/imágenes =======
         async def guardar(_=None):
-            # 1) forzar sincronización de inputs
+            # Forzar blur para sincronizar valores, pero no bloqueamos si faltan
             await ui.run_javascript('document.activeElement && document.activeElement.blur()')
-            await asyncio.sleep(0.12)  # ← da tiempo a que .value se actualice
+            await asyncio.sleep(0.05)
 
-            # 2) leer nombre/precio de forma robusta
-            nombre_val = (nombre.value or '').strip()
+            # Nombre por defecto si vacío
+            nombre_val = (nombre.value or '').strip() or 'Sin nombre'
 
+            # Precio: lee value/modelValue; si no parsea, 0.0
             precio_raw = precio.value
             if precio_raw in (None, ''):
                 try:
-                    # Quasar usa modelValue internamente
                     precio_raw = (getattr(precio, '_props', {}) or {}).get('modelValue', precio_raw)
                 except Exception:
                     pass
             precio_val = _to_float_or_none(precio_raw)
-
-            # 3) si hay ficheros seleccionados pero aún subiendo, esperar
-            pending_selection = False
-            try:
-                up_props = getattr(uploader, '_props', {}) or {}
-                selected = up_props.get('modelValue') or up_props.get('value') or []
-                pending_selection = bool(selected) and len(new_bytes) == 0
-            except Exception:
-                pending_selection = False
-            if pending_selection:
-                ui.notify('Subiendo imágenes… espera un momento y vuelve a pulsar Guardar', type='warning'); return
-
-            # 4) validación final
-            if not nombre_val or precio_val is None or len(new_bytes) == 0:
-                ui.notify('Completa nombre, precio y al menos una imagen', type='warning'); return
+            if precio_val is None:
+                precio_val = 0.0
 
             data = {
                 'nombre': nombre_val, 'precio': float(precio_val),
@@ -557,8 +545,9 @@ def dialog_add_mueble():
                 'alto_asiento': _none_if_empty_or_zero(alto_asiento.value),
                 'ancho': _none_if_empty_or_zero(ancho.value),
             }
-            await add_mueble(data, new_bytes)
+            await add_mueble(data, new_bytes)  # aunque no haya imágenes
             ui.notify('¡Mueble añadido!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+        # =======================================================================
 
         with ui.row().classes('justify-end mt-3'):
             ui.button('Cancelar', on_click=d.close).props('flat')
@@ -985,6 +974,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
