@@ -511,23 +511,41 @@ def dialog_add_mueble():
         async def on_upload(e):
             new_bytes.append(await e.content.read())
             ui.notify(f'Imagen subida ({len(new_bytes)})')
-        # --- CAMBIO: subir automáticamente y limitar a imágenes; guardamos referencia ---
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
                      .props('accept="image/*" max-file-size="52428800"')
+
         async def guardar(_=None):
-            # --- CAMBIO: asegurar blur/sincronización y conversión robusta del precio ---
+            # 1) forzar sincronización de inputs
             await ui.run_javascript('document.activeElement && document.activeElement.blur()')
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.12)  # ← da tiempo a que .value se actualice
 
+            # 2) leer nombre/precio de forma robusta
             nombre_val = (nombre.value or '').strip()
-            precio_val = _to_float_or_none(precio.value)
 
-            # Si el usuario ya seleccionó archivos pero aún no han llegado al callback
-            if len(new_bytes) == 0 and getattr(uploader, 'value', None):
+            precio_raw = precio.value
+            if precio_raw in (None, ''):
+                try:
+                    # Quasar usa modelValue internamente
+                    precio_raw = (getattr(precio, '_props', {}) or {}).get('modelValue', precio_raw)
+                except Exception:
+                    pass
+            precio_val = _to_float_or_none(precio_raw)
+
+            # 3) si hay ficheros seleccionados pero aún subiendo, esperar
+            pending_selection = False
+            try:
+                up_props = getattr(uploader, '_props', {}) or {}
+                selected = up_props.get('modelValue') or up_props.get('value') or []
+                pending_selection = bool(selected) and len(new_bytes) == 0
+            except Exception:
+                pending_selection = False
+            if pending_selection:
                 ui.notify('Subiendo imágenes… espera un momento y vuelve a pulsar Guardar', type='warning'); return
 
+            # 4) validación final
             if not nombre_val or precio_val is None or len(new_bytes) == 0:
                 ui.notify('Completa nombre, precio y al menos una imagen', type='warning'); return
+
             data = {
                 'nombre': nombre_val, 'precio': float(precio_val),
                 'descripcion': descripcion.value, 'tienda': tienda.value, 'tipo': tipo.value,
@@ -541,6 +559,7 @@ def dialog_add_mueble():
             }
             await add_mueble(data, new_bytes)
             ui.notify('¡Mueble añadido!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+
         with ui.row().classes('justify-end mt-3'):
             ui.button('Cancelar', on_click=d.close).props('flat')
             ui.button('Guardar', on_click=guardar, color='primary')
@@ -655,7 +674,7 @@ def _kv_attr(label: str, value: str):
 def _kv_desc(value: str):
     ui.html(
         f'<div class="kv kv-desc kv-line" style="margin-bottom:16px">'
-        f'<strong class="k">Descripción:</strong>&nbsp;<span class="v">{_safe(value)}</span>'
+        f'<strong class="k">Descripción:</strong>&nbsp;<span class="v'>{_safe(value)}</span>'
         f'</div>'
     )
 
@@ -847,7 +866,7 @@ async def index(request: Request):
                 filtro_tipo = ui.select(['Todos'], value='Todos', label='Filtrar por tipo')
                 orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por')
 
-            # --- CAMBIO: cargar opciones de tipo sin timer y forzar update ---
+            # --- cargar opciones de tipo sin timer y forzar update ---
             try:
                 filtro_tipo.options = await query_tipos()
                 filtro_tipo.update()
@@ -965,6 +984,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
