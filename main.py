@@ -162,6 +162,15 @@ def _none_if_empty_or_zero(v):
     except Exception:
         return v or None
 
+# NUEVO: casteo numérico seguro para inicializar ui.number sin reventar el formulario
+def _num_or_none(v):
+    try:
+        if v in (None, ''):
+            return None
+        return float(v)
+    except Exception:
+        return None
+
 def to_webp_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
     im = Image.open(BytesIO(raw))
     if im.mode not in ('RGB','RGBA'):
@@ -499,12 +508,20 @@ def dialog_add_mueble():
         async def on_upload(e):
             new_bytes.append(await e.content.read())
             ui.notify(f'Imagen subida ({len(new_bytes)})')
-        ui.upload(multiple=True, on_upload=on_upload)
+        # FIX: subida automática y limitar a imágenes
+        ui.upload(multiple=True, on_upload=on_upload, auto_upload=True).props('accept="image/*"')
         async def guardar(_=None):
-            if not nombre.value or not precio.value or not new_bytes:
+            # FIX: asegurar que el input pierde foco y sincroniza valor
+            await ui.run_javascript('document.activeElement && document.activeElement.blur()')
+            await asyncio.sleep(0)
+
+            nombre_val = (nombre.value or '').strip()
+            precio_val = None if precio.value in (None, '') else float(precio.value)
+
+            if not nombre_val or precio_val is None or len(new_bytes) == 0:
                 ui.notify('Completa nombre, precio y al menos una imagen', type='warning'); return
             data = {
-                'nombre': nombre.value, 'precio': float(precio.value),
+                'nombre': nombre_val, 'precio': float(precio_val),
                 'descripcion': descripcion.value, 'tienda': tienda.value, 'tipo': tipo.value,
                 'alto': _none_if_empty_or_zero(alto.value), 'largo': _none_if_empty_or_zero(largo.value),
                 'fondo': _none_if_empty_or_zero(fondo.value), 'diametro': _none_if_empty_or_zero(diametro.value),
@@ -531,21 +548,25 @@ def dialog_edit_mueble(mueble_id: int):
             with cont:
                 with ui.grid(columns=2).classes('gap-3'):
                     tienda = ui.select(['El Rastro', 'Regueros'], value=mueble['tienda'], label='Tienda')
-                    tipo = ui.select(TIPOS, value=mueble['tipo'] or 'Otro artículo', label='Tipo de mueble')
+                    # FIX: garantizar que el tipo exista entre las opciones
+                    tipo_val = mueble['tipo'] if (mueble.get('tipo') in TIPOS) else 'Otro artículo'
+                    tipo = ui.select(TIPOS, value=tipo_val, label='Tipo de mueble')
                     nombre = ui.input('Nombre*', value=mueble['nombre'])
-                    precio = ui.number(label='Precio (€)*', value=float(mueble['precio'] or 0), format='%.2f', min=0)
+                    # FIX: valor seguro para precio
+                    precio = ui.number(label='Precio (€)*', value=_num_or_none(mueble.get('precio')), format='%.2f', min=0)
                 descripcion = ui.textarea('Descripción', value=mueble.get('descripcion') or '').classes('w-full')
                 vendido_sw = ui.switch('Marcar como vendido', value=bool(mueble['vendido']))
                 with ui.grid(columns=3).classes('gap-2'):
-                    alto = ui.number(label='Alto (cm)', value=mueble.get('alto') or 0)
-                    largo = ui.number(label='Largo (cm)', value=mueble.get('largo') or 0)
-                    fondo = ui.number(label='Fondo (cm)', value=mueble.get('fondo') or 0)
-                    diametro = ui.number(label='Diámetro (cm)', value=mueble.get('diametro') or 0)
-                    diametro_base = ui.number(label='Ø Base (cm)', value=mueble.get('diametro_base') or 0)
-                    diametro_boca = ui.number(label='Ø Boca (cm)', value=mueble.get('diametro_boca') or 0)
-                    alto_respaldo = ui.number(label='Alto respaldo (cm)', value=mueble.get('alto_respaldo') or 0)
-                    alto_asiento = ui.number(label='Alto asiento (cm)', value=mueble.get('alto_asiento') or 0)
-                    ancho = ui.number(label='Ancho (cm)', value=mueble.get('ancho') or 0)
+                    # FIX: inicializar números con _num_or_none
+                    alto = ui.number(label='Alto (cm)', value=_num_or_none(mueble.get('alto')))
+                    largo = ui.number(label='Largo (cm)', value=_num_or_none(mueble.get('largo')))
+                    fondo = ui.number(label='Fondo (cm)', value=_num_or_none(mueble.get('fondo')))
+                    diametro = ui.number(label='Diámetro (cm)', value=_num_or_none(mueble.get('diametro')))
+                    diametro_base = ui.number(label='Ø Base (cm)', value=_num_or_none(mueble.get('diametro_base')))
+                    diametro_boca = ui.number(label='Ø Boca (cm)', value=_num_or_none(mueble.get('diametro_boca')))
+                    alto_respaldo = ui.number(label='Alto respaldo (cm)', value=_num_or_none(mueble.get('alto_respaldo')))
+                    alto_asiento = ui.number(label='Alto asiento (cm)', value=_num_or_none(mueble.get('alto_asiento')))
+                    ancho = ui.number(label='Ancho (cm)', value=_num_or_none(mueble.get('ancho')))
 
                 # Imágenes existentes
                 imgs = await app.state.pool.fetch(
@@ -582,12 +603,18 @@ def dialog_edit_mueble(mueble_id: int):
                 async def on_upload(e):
                     new_bytes.append(await e.content.read())
                     ui.notify(f'Imagen subida ({len(new_bytes)})')
-                ui.upload(multiple=True, on_upload=on_upload)
+                # FIX: subida automática y limitar a imágenes
+                ui.upload(multiple=True, on_upload=on_upload, auto_upload=True).props('accept="image/*"')
                 with ui.row().classes('justify-end mt-3'):
                     ui.button('Cancelar', on_click=d.close).props('flat')
                     async def guardar(_=None):
+                        # FIX: asegurar sincronización de inputs antes de leer
+                        await ui.run_javascript('document.activeElement && document.activeElement.blur()')
+                        await asyncio.sleep(0)
+
+                        precio_val = None if precio.value in (None, '') else float(precio.value)
                         data = {
-                            'nombre': nombre.value, 'precio': float(precio.value or 0),
+                            'nombre': nombre.value, 'precio': precio_val,
                             'descripcion': descripcion.value, 'tienda': tienda.value, 'tipo': tipo.value,
                             'vendido': bool(vendido_sw.value),
                             'alto': _none_if_empty_or_zero(alto.value), 'largo': _none_if_empty_or_zero(largo.value),
@@ -937,6 +964,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
