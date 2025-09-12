@@ -674,9 +674,10 @@ def _kv_attr(label: str, value: str):
 def _kv_desc(value: str):
     ui.html(
         f'<div class="kv kv-desc kv-line" style="margin-bottom:16px">'
-        f'<strong class="k">Descripción:</strong>&nbsp;<span class="v'>{_safe(value)}</span>'
+        f'<strong class="k">Descripción:</strong>&nbsp;<span class="v">{_safe(value)}</span>'
         f'</div>'
     )
+
 
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
                          orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
