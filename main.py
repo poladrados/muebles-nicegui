@@ -417,20 +417,30 @@ async def get_mueble(mueble_id: int):
 async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
-            mid = await conn.fetchval(
+            # Obtener un ID válido aunque la columna id no tenga DEFAULT
+            seq = await conn.fetchval("SELECT pg_get_serial_sequence('muebles','id')")
+            if seq:
+                mid = await conn.fetchval("SELECT nextval($1::regclass)", seq)
+            else:
+                # Fallback seguro: bloquea la tabla y calcula MAX(id)+1
+                await conn.execute("LOCK TABLE muebles IN SHARE ROW EXCLUSIVE MODE")
+                mid = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM muebles")
+
+            await conn.execute(
                 """
-                INSERT INTO muebles (nombre, precio, descripcion, tienda, tipo, fecha,
+                INSERT INTO muebles (id, nombre, precio, descripcion, tienda, tipo, fecha,
                     alto,largo,fondo,diametro,diametro_base,diametro_boca,alto_respaldo,alto_asiento,ancho,vendido)
-                VALUES ($1,$2,$3,$4,$5, NOW(),
-                        $6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-                RETURNING id
-            """,
+                VALUES ($1,$2,$3,$4,$5,$6, NOW(),
+                        $7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                """,
+                mid,
                 data.get('nombre'), data.get('precio'), data.get('descripcion'),
                 data.get('tienda'), data.get('tipo'),
                 data.get('alto'), data.get('largo'), data.get('fondo'),
                 data.get('diametro'), data.get('diametro_base'), data.get('diametro_boca'),
                 data.get('alto_respaldo'), data.get('alto_asiento'), data.get('ancho'),
-                False)
+                False,
+            )
             for i, b in enumerate(images_bytes):
                 b_webp = to_webp_bytes(b)
                 b64 = base64.b64encode(b_webp).decode('utf-8')
@@ -439,6 +449,7 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                     mid, b64, (i == 0)
                 )
     return mid
+
 
 async def update_mueble(mueble_id: int, data: dict):
     fields = ['nombre','precio','descripcion','tienda','tipo','vendido','alto','largo','fondo',
