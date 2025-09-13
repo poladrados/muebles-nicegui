@@ -516,8 +516,8 @@ def dialog_add_mueble():
 
         # ======= ÚNICO CAMBIO: guardar sin validar nombre/precio/imágenes =======
         async def guardar(_=None):
-            # Forzar blur para sincronizar valores, pero no bloqueamos si faltan
-            await ui.run_javascript('document.activeElement && document.activeElement.blur()')
+            # Forzar blur para sincronizar valores, pero sin await (NiceGUI: no es corrutina)
+            ui.run_javascript('document.activeElement && document.activeElement.blur()')
             await asyncio.sleep(0.05)
 
             # Nombre por defecto si vacío
@@ -974,6 +974,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
