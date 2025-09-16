@@ -519,8 +519,21 @@ def dialog_add_mueble():
             ancho = ui.number(label='Ancho (cm)', min=0)
         ui.label('Imágenes (la primera será principal)').classes('mt-2')
         new_bytes: list[bytes] = []
-        async def on_upload(e):
-            new_bytes.append(await e.content.read())
+        def on_upload(e):
+            # e.content puede ser bytes o un file-like con .read(); en versiones recientes puede venir e.contents (lista)
+            def _get_bytes(c):
+                if isinstance(c, (bytes, bytearray)):
+                    return bytes(c)
+                if hasattr(c, 'read'):
+                    return c.read()  # síncrono
+                return bytes(c)
+
+            if hasattr(e, 'contents') and e.contents:
+                for c in e.contents:
+                    new_bytes.append(_get_bytes(c))
+            elif hasattr(e, 'content'):
+                new_bytes.append(_get_bytes(e.content))
+
             ui.notify(f'Imagen subida ({len(new_bytes)})')
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
                      .props('accept="image/*" max-file-size="52428800"')
@@ -623,8 +636,21 @@ def dialog_edit_mueble(mueble_id: int):
                 # Añadir nuevas
                 ui.label('Añadir nuevas imágenes').classes('mt-2')
                 new_bytes: list[bytes] = []
-                async def on_upload(e):
-                    new_bytes.append(await e.content.read())
+                def on_upload(e):
+                    # Compatible con e.content (uno) o e.contents (lista)
+                    def _get_bytes(c):
+                        if isinstance(c, (bytes, bytearray)):
+                            return bytes(c)
+                        if hasattr(c, 'read'):
+                            return c.read()  # síncrono
+                        return bytes(c)
+
+                    if hasattr(e, 'contents') and e.contents:
+                        for c in e.contents:
+                            new_bytes.append(_get_bytes(c))
+                    elif hasattr(e, 'content'):
+                        new_bytes.append(_get_bytes(e.content))
+
                     ui.notify(f'Imagen subida ({len(new_bytes)})')
                 ui.upload(multiple=True, on_upload=on_upload)
                 with ui.row().classes('justify-end mt-3'):
