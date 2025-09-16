@@ -575,7 +575,7 @@ def dialog_add_mueble():
 
         with ui.row().classes('justify-end mt-3'):
             ui.button('Cancelar', on_click=d.close).props('flat')
-            ui.button('Guardar', on_click=lambda: asyncio.create_task(guardar()), color='primary')
+            ui.button('Guardar', on_click=guardar, color='primary')
     return d
 
 def dialog_edit_mueble(mueble_id: int):
@@ -674,7 +674,7 @@ def dialog_edit_mueble(mueble_id: int):
                             for i, raw in enumerate(new_bytes):
                                 await add_image(mueble_id, raw, will_be_principal=(first_principal and i == 0))
                         ui.notify('¡Cambios guardados!', type='positive'); d.close(); ui.run_javascript('location.reload()')
-                    ui.button('Guardar', on_click=lambda: asyncio.create_task(guardar()), color='primary')
+                    ui.button('Guardar', on_click=guardar, color='primary')
         ui.timer(0.05, cargar_datos, once=True)
     return d
 
