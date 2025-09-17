@@ -182,6 +182,45 @@ def to_webp_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
     buf=BytesIO(); im.save(buf, format='WEBP', quality=quality, method=6)
     return buf.getvalue()
 
+# ---- NUEVO: helpers para fallback y MIME ----
+def _sniff_mime(data: bytes) -> str:
+    if data[:2] == b'\xff\xd8':
+        return 'image/jpeg'
+    if data[:8] == b'\x89PNG\r\n\x1a\n':
+        return 'image/png'
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'image/webp'
+    return 'application/octet-stream'
+
+def to_best_image_bytes(raw: bytes, max_size=800):
+    """Devuelve (bytes, mime). WEBP si es posible; si no, JPEG."""
+    try:
+        return to_webp_bytes(raw, max_size=max_size), 'image/webp'
+    except Exception:
+        im = Image.open(BytesIO(raw))
+        if im.mode not in ('RGB','RGBA'):
+            im = im.convert('RGB')
+        im.thumbnail((max_size, max_size))
+        buf = BytesIO()
+        im.save(buf, format='JPEG', quality=86, optimize=True, progressive=True)
+        return buf.getvalue(), 'image/jpeg'
+
+def _thumb_bytes_any(src: bytes, px=720):
+    """Devuelve (bytes, mime) de miniatura. WEBP si es posible; si no, JPEG."""
+    im = Image.open(BytesIO(src))
+    if im.mode not in ('RGB','RGBA'):
+        im = im.convert('RGB')
+    im.thumbnail((px, px))
+    try:
+        buf = BytesIO()
+        im.save(buf, 'WEBP', quality=92, method=6)
+        return buf.getvalue(), 'image/webp'
+    except Exception:
+        buf = BytesIO()
+        im.save(buf, 'JPEG', quality=86, optimize=True, progressive=True)
+        return buf.getvalue(), 'image/jpeg'
+# --------------------------------------------
+
 def es_nuevo(fecha_val)->bool:
     if not fecha_val: return False
     if isinstance(fecha_val, datetime): fecha=fecha_val
@@ -243,11 +282,17 @@ async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
         """, mueble_id, i)
     if not row: return Response(status_code=404)
     data = base64.b64decode(row['imagen_base64'])
-    if thumb==1: data=_thumb_bytes(data,720)
+    if thumb == 1:
+        try:
+            data, mime = _thumb_bytes_any(data, 720)
+        except Exception:
+            mime = _sniff_mime(data)
+    else:
+        mime = _sniff_mime(data)
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type='image/webp', headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
 
 @app.get('/img_by_id/{img_id}')
 async def img_by_id(request: Request, img_id:int, thumb:int=0):
@@ -255,11 +300,17 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
         row = await conn.fetchrow('SELECT imagen_base64 FROM imagenes_muebles WHERE id=$1', img_id)
     if not row: return Response(status_code=404)
     data = base64.b64decode(row['imagen_base64'])
-    if thumb==1: data=_thumb_bytes(data,720)
+    if thumb == 1:
+        try:
+            data, mime = _thumb_bytes_any(data, 720)
+        except Exception:
+            mime = _sniff_mime(data)
+    else:
+        mime = _sniff_mime(data)
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type='image/webp', headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
@@ -443,11 +494,11 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                 False,
             )
 
-            # Procesar imágenes con manejo de errores
+            # Procesar imágenes con manejo de errores + fallback a JPEG
             for i, b in enumerate(images_bytes):
                 try:
-                    b_webp = to_webp_bytes(b)
-                    b64 = base64.b64encode(b_webp).decode('utf-8')
+                    enc_bytes, _mime = to_best_image_bytes(b)  # WEBP o JPEG
+                    b64 = base64.b64encode(enc_bytes).decode('utf-8')
                     await conn.execute(
                         'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
                         mid, b64, (i == 0)
