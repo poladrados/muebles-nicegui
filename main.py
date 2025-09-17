@@ -426,6 +426,7 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                 await conn.execute("LOCK TABLE muebles IN SHARE ROW EXCLUSIVE MODE")
                 mid = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM muebles")
 
+            # Insertar el mueble
             await conn.execute(
                 """
                 INSERT INTO muebles (id, nombre, precio, descripcion, tienda, tipo, fecha,
@@ -441,13 +442,20 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                 data.get('alto_respaldo'), data.get('alto_asiento'), data.get('ancho'),
                 False,
             )
+
+            # Procesar imágenes con manejo de errores
             for i, b in enumerate(images_bytes):
-                b_webp = to_webp_bytes(b)
-                b64 = base64.b64encode(b_webp).decode('utf-8')
-                await conn.execute(
-                    'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
-                    mid, b64, (i == 0)
-                )
+                try:
+                    b_webp = to_webp_bytes(b)
+                    b64 = base64.b64encode(b_webp).decode('utf-8')
+                    await conn.execute(
+                        'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
+                        mid, b64, (i == 0)
+                    )
+                except Exception as e:
+                    print(f"Error procesando imagen {i}: {str(e)}")
+                    # Continuar con las siguientes imágenes
+                    continue
     return mid
 
 
@@ -519,21 +527,8 @@ def dialog_add_mueble():
             ancho = ui.number(label='Ancho (cm)', min=0)
         ui.label('Imágenes (la primera será principal)').classes('mt-2')
         new_bytes: list[bytes] = []
-        def on_upload(e):
-            # e.content puede ser bytes o un file-like con .read(); en versiones recientes puede venir e.contents (lista)
-            def _get_bytes(c):
-                if isinstance(c, (bytes, bytearray)):
-                    return bytes(c)
-                if hasattr(c, 'read'):
-                    return c.read()  # síncrono
-                return bytes(c)
-
-            if hasattr(e, 'contents') and e.contents:
-                for c in e.contents:
-                    new_bytes.append(_get_bytes(c))
-            elif hasattr(e, 'content'):
-                new_bytes.append(_get_bytes(e.content))
-
+        async def on_upload(e):
+            new_bytes.append(await e.content.read())
             ui.notify(f'Imagen subida ({len(new_bytes)})')
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
                      .props('accept="image/*" max-file-size="52428800"')
@@ -636,21 +631,8 @@ def dialog_edit_mueble(mueble_id: int):
                 # Añadir nuevas
                 ui.label('Añadir nuevas imágenes').classes('mt-2')
                 new_bytes: list[bytes] = []
-                def on_upload(e):
-                    # Compatible con e.content (uno) o e.contents (lista)
-                    def _get_bytes(c):
-                        if isinstance(c, (bytes, bytearray)):
-                            return bytes(c)
-                        if hasattr(c, 'read'):
-                            return c.read()  # síncrono
-                        return bytes(c)
-
-                    if hasattr(e, 'contents') and e.contents:
-                        for c in e.contents:
-                            new_bytes.append(_get_bytes(c))
-                    elif hasattr(e, 'content'):
-                        new_bytes.append(_get_bytes(e.content))
-
+                async def on_upload(e):
+                    new_bytes.append(await e.content.read())
                     ui.notify(f'Imagen subida ({len(new_bytes)})')
                 ui.upload(multiple=True, on_upload=on_upload)
                 with ui.row().classes('justify-end mt-3'):
