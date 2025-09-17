@@ -1,6 +1,5 @@
 # main.py — Inventario El Jueves (NiceGUI + asyncpg)
 # Fixes: desactiva y limpia Service Worker para evitar recargas, ancla miniaturas, botones admin operativos (diálogos completos + 'Vendido' = eliminar)
-# + Parche imágenes: soporte sin WEBP, BYTEA/TEXT, MIME correcto y thumbnails robustos
 
 from nicegui import ui, app
 from fastapi import Response, Request, status
@@ -12,7 +11,7 @@ from functools import partial
 from dotenv import load_dotenv
 import pandas as pd
 from datetime import datetime
-from PIL import Image, features
+from PIL import Image
 from io import BytesIO
 
 load_dotenv()
@@ -28,6 +27,24 @@ def _origin_from(request: Request) -> str:
     """Origen absoluto fiable del host que ha hecho la petición."""
     # request.base_url == "https://host/"  -> quitamos la barra final
     return str(request.base_url).rstrip('/')
+
+# >>> NUEVO: helper para leer bytes del uploader, compatible con bytes o UploadFile <<<
+async def _read_upload_bytes(e):
+    """Devuelve siempre bytes, funcione e.content como bytes o como objeto con .read()."""
+    c = getattr(e, 'content', None)
+    if c is None:
+        return b''
+    read = getattr(c, 'read', None)
+    if callable(read):
+        maybe = read()
+        if asyncio.iscoroutine(maybe):
+            return await maybe
+        return maybe  # ya son bytes
+    if isinstance(c, (bytes, bytearray)):
+        return bytes(c)
+    if isinstance(c, memoryview):
+        return c.tobytes()
+    return bytes(c)
 
 # ---------- PWA / static ----------
 try:
@@ -175,94 +192,13 @@ def _to_float_or_none(v):
     except Exception:
         return None
 
-# ===================== PARCHE IMÁGENES (guardar / detectar / miniaturas) =====================
-
-def _pillow_supports_webp() -> bool:
-    try:
-        return bool(features.check('webp'))
-    except Exception:
-        return False
-
-def _process_image_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
-    """
-    Devuelve bytes listos para guardar en DB:
-    - Si hay soporte WEBP: WEBP optimizado.
-    - Si no: JPEG optimizado.
-    Si todo falla, devuelve los bytes originales.
-    """
-    try:
-        im = Image.open(BytesIO(raw))
-        if im.mode not in ('RGB','RGBA'):
-            im = im.convert('RGB')
-        im.thumbnail((max_size,max_size))
-        buf = BytesIO()
-        if _pillow_supports_webp():
-            im.save(buf, format='WEBP', quality=quality, method=6)
-        else:
-            im.save(buf, format='JPEG', quality=86, optimize=True, progressive=True)
-        return buf.getvalue()
-    except Exception as e:
-        print(f"[IMG] _process_image_bytes fallback: {e}")
-        return raw  # peor caso: guardamos el original
-
-def _sniff_mime(data: bytes) -> str:
-    # ‘magic numbers’ rápidos
-    if len(data) >= 12 and data[0:4] == b'RIFF' and data[8:12] == b'WEBP':
-        return 'image/webp'
-    if len(data) >= 2 and data[0:2] == b'\xff\xd8':
-        return 'image/jpeg'
-    if len(data) >= 8 and data[0:8] == b'\x89PNG\r\n\x1a\n':
-        return 'image/png'
-    # fallback PIL
-    try:
-        fmt = Image.open(BytesIO(data)).format
-        return {'JPEG':'image/jpeg','PNG':'image/png','WEBP':'image/webp'}.get(fmt, 'application/octet-stream')
-    except Exception:
-        return 'application/octet-stream'
-
-def _is_webp(data: bytes) -> bool:
-    return len(data) >= 12 and data[0:4] == b'RIFF' and data[8:12] == b'WEBP'
-
-def _make_thumb_or_passthrough(src: bytes, px=720) -> bytes:
-    """
-    Genera miniatura. Si es WEBP y Pillow no lo soporta, devuelve el original (mejor eso que 500).
-    """
-    if _is_webp(src) and not _pillow_supports_webp():
-        return src  # sin soporte: no tocamos
-    try:
-        im = Image.open(BytesIO(src))
-        if im.mode not in ('RGB','RGBA'):
-            im = im.convert('RGB')
-        im.thumbnail((px,px))
-        buf=BytesIO()
-        fmt = (im.format or 'JPEG').upper()
-        if fmt == 'WEBP' and not _pillow_supports_webp():
-            fmt = 'JPEG'
-        save_kwargs = {'quality': 92}
-        if fmt == 'WEBP':
-            save_kwargs['method'] = 6
-        im.save(buf, fmt, **save_kwargs)
-        return buf.getvalue()
-    except Exception as e:
-        print(f"[IMG] _make_thumb_or_passthrough fallback: {e}")
-        return src
-
-def _decode_img_field(db_val) -> bytes:
-    """Admite TEXT (base64) o BYTEA (bytes)"""
-    if db_val is None:
-        return b''
-    if isinstance(db_val, (bytes, bytearray)):
-        return bytes(db_val)
-    try:
-        return base64.b64decode(db_val)
-    except Exception:
-        # si ya es base64-decoded o algo raro, intentar forzar bytes
-        try:
-            return bytes(db_val, 'utf-8', errors='ignore')
-        except Exception:
-            return b''
-
-# ============================================================================================
+def to_webp_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
+    im = Image.open(BytesIO(raw))
+    if im.mode not in ('RGB','RGBA'):
+        im = im.convert('RGB')
+    im.thumbnail((max_size,max_size))
+    buf=BytesIO(); im.save(buf, format='WEBP', quality=quality, method=6)
+    return buf.getvalue()
 
 def es_nuevo(fecha_val)->bool:
     if not fecha_val: return False
@@ -274,7 +210,6 @@ def es_nuevo(fecha_val)->bool:
     return delta.days <= 1
 
 def _thumb_bytes(src: bytes, px=720)->bytes:
-    # (conservado; ahora usamos el robusto en /img)
     im = Image.open(BytesIO(src))
     if im.mode not in ('RGB','RGBA'):
         im = im.convert('RGB')
@@ -324,32 +259,29 @@ async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
              ORDER BY es_principal DESC, id ASC
              OFFSET $2 LIMIT 1
         """, mueble_id, i)
-    if not row: 
-        return Response(status_code=404)
-    raw = _decode_img_field(row['imagen_base64'])
-    data = _make_thumb_or_passthrough(raw, 720) if thumb==1 else raw
-    mime = _sniff_mime(data)
+    if not row: return Response(status_code=404)
+    data = base64.b64decode(row['imagen_base64'])
+    if thumb==1: data=_thumb_bytes(data,720)
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type=mime, headers=headers)
+    return Response(content=data, media_type='image/webp', headers=headers)
 
 @app.get('/img_by_id/{img_id}')
 async def img_by_id(request: Request, img_id:int, thumb:int=0):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow('SELECT imagen_base64 FROM imagenes_muebles WHERE id=$1', img_id)
-    if not row: 
-        return Response(status_code=404)
-    raw = _decode_img_field(row['imagen_base64'])
-    data = _make_thumb_or_passthrough(raw, 720) if thumb==1 else raw
-    mime = _sniff_mime(data)
+    if not row: return Response(status_code=404)
+    data = base64.b64decode(row['imagen_base64'])
+    if thumb==1: data=_thumb_bytes(data,720)
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type=mime, headers=headers)
+    return Response(content=data, media_type='image/webp', headers=headers)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
-def _jpeg_from_raw(raw: bytes, max_w: int = 1200, quality: int = 86) -> bytes:
+def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
+    raw = base64.b64decode(b64)
     im = Image.open(BytesIO(raw))
     if im.mode not in ('RGB', 'RGBA'): im = im.convert('RGB')
     else: im = im.convert('RGB')
@@ -372,17 +304,12 @@ async def og_img(request: Request, mueble_id: int):
         """, mueble_id)
     if not row:
         return Response(status_code=404)
-    raw = _decode_img_field(row['imagen_base64'])
     try:
-        jpeg = _jpeg_from_raw(raw)
-        headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': 'image/jpeg'}
-        return Response(content=jpeg, media_type='image/jpeg', headers=headers)
-    except Exception as e:
-        # Fallback: si no podemos convertir a JPEG (p.ej. WEBP sin soporte), servimos el original
-        print(f"[OG_IMG] fallback original: {e}")
-        mime = _sniff_mime(raw)
-        headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': mime}
-        return Response(content=raw, media_type=mime, headers=headers)
+        jpeg = _jpeg_from_b64(row['imagen_base64'])
+    except Exception:
+        return Response(status_code=500)
+    headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': 'image/jpeg'}
+    return Response(content=jpeg, media_type='image/jpeg', headers=headers)
 
 # === Service Worker en raíz ===
 @app.get('/service-worker.js', include_in_schema=False)
@@ -534,31 +461,19 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                 False,
             )
 
-            # Procesar imágenes con manejo de errores + fallback formato
-            saved = 0
+            # Procesar imágenes con manejo de errores
             for i, b in enumerate(images_bytes):
                 try:
-                    processed = _process_image_bytes(b)  # WEBP si hay soporte, si no JPEG; si falla, original
-                except Exception as e:
-                    print(f"[ADD_MUEBLE] fallo process -> guardo original: {e}")
-                    processed = b
-                try:
-                    b64 = base64.b64encode(processed).decode('utf-8')
+                    b_webp = to_webp_bytes(b)
+                    b64 = base64.b64encode(b_webp).decode('utf-8')
                     await conn.execute(
                         'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
                         mid, b64, (i == 0)
                     )
-                    saved += 1
                 except Exception as e:
-                    print(f"[ADD_MUEBLE] Error insertando imagen {i}: {e}")
+                    print(f"Error procesando imagen {i}: {str(e)}")
+                    # Continuar con las siguientes imágenes
                     continue
-
-            # trazas para diagnóstico
-            try:
-                n = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
-                print(f"[ADD_MUEBLE] id={mid} imagenes_guardadas={n} (loop_saved={saved})")
-            except Exception:
-                pass
     return mid
 
 
@@ -587,8 +502,8 @@ async def delete_mueble(mueble_id: int):
             await conn.execute('DELETE FROM muebles WHERE id=$1', mueble_id)
 
 async def add_image(mueble_id: int, content_bytes: bytes, will_be_principal: bool = False):
-    processed = _process_image_bytes(content_bytes)
-    b64 = base64.b64encode(processed).decode('utf-8')
+    b_webp = to_webp_bytes(content_bytes)
+    b64 = base64.b64encode(b_webp).decode('utf-8')
     async with app.state.pool.acquire() as conn:
         await conn.execute(
             'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
@@ -631,7 +546,8 @@ def dialog_add_mueble():
         ui.label('Imágenes (la primera será principal)').classes('mt-2')
         new_bytes: list[bytes] = []
         async def on_upload(e):
-            new_bytes.append(await e.content.read())
+            content = await _read_upload_bytes(e)
+            new_bytes.append(content)
             ui.notify(f'Imagen subida ({len(new_bytes)})')
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
                      .props('accept="image/*" max-file-size="52428800"')
@@ -735,7 +651,8 @@ def dialog_edit_mueble(mueble_id: int):
                 ui.label('Añadir nuevas imágenes').classes('mt-2')
                 new_bytes: list[bytes] = []
                 async def on_upload(e):
-                    new_bytes.append(await e.content.read())
+                    content = await _read_upload_bytes(e)
+                    new_bytes.append(content)
                     ui.notify(f'Imagen subida ({len(new_bytes)})')
                 ui.upload(multiple=True, on_upload=on_upload)
                 with ui.row().classes('justify-end mt-3'):
@@ -1096,6 +1013,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
