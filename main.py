@@ -182,23 +182,20 @@ def to_webp_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
     buf=BytesIO(); im.save(buf, format='WEBP', quality=quality, method=6)
     return buf.getvalue()
 
-# ---- NUEVO: helpers para fallback y MIME ----
+# ====== NUEVO: helpers para fallback y MIME ======
 def _sniff_mime(data: bytes) -> str:
-    if data[:2] == b'\xff\xd8':
-        return 'image/jpeg'
-    if data[:8] == b'\x89PNG\r\n\x1a\n':
-        return 'image/png'
-    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
-        return 'image/webp'
+    if data[:2] == b'\xff\xd8': return 'image/jpeg'
+    if data[:8] == b'\x89PNG\r\n\x1a\n': return 'image/png'
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP': return 'image/webp'
     return 'application/octet-stream'
 
 def to_best_image_bytes(raw: bytes, max_size=800):
-    """Devuelve (bytes, mime). WEBP si es posible; si no, JPEG."""
+    """WEBP si es posible; si no, JPEG. Devuelve (bytes, mime)."""
     try:
         return to_webp_bytes(raw, max_size=max_size), 'image/webp'
     except Exception:
         im = Image.open(BytesIO(raw))
-        if im.mode not in ('RGB','RGBA'):
+        if im.mode not in ('RGB', 'RGBA'):
             im = im.convert('RGB')
         im.thumbnail((max_size, max_size))
         buf = BytesIO()
@@ -206,9 +203,9 @@ def to_best_image_bytes(raw: bytes, max_size=800):
         return buf.getvalue(), 'image/jpeg'
 
 def _thumb_bytes_any(src: bytes, px=720):
-    """Devuelve (bytes, mime) de miniatura. WEBP si es posible; si no, JPEG."""
+    """Miniatura en WEBP si se puede; si no, JPEG. Devuelve (bytes, mime)."""
     im = Image.open(BytesIO(src))
-    if im.mode not in ('RGB','RGBA'):
+    if im.mode not in ('RGB', 'RGBA'):
         im = im.convert('RGB')
     im.thumbnail((px, px))
     try:
@@ -219,7 +216,7 @@ def _thumb_bytes_any(src: bytes, px=720):
         buf = BytesIO()
         im.save(buf, 'JPEG', quality=86, optimize=True, progressive=True)
         return buf.getvalue(), 'image/jpeg'
-# --------------------------------------------
+# ================================================
 
 def es_nuevo(fecha_val)->bool:
     if not fecha_val: return False
@@ -281,7 +278,12 @@ async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
              OFFSET $2 LIMIT 1
         """, mueble_id, i)
     if not row: return Response(status_code=404)
-    data = base64.b64decode(row['imagen_base64'])
+    try:
+        data = base64.b64decode(row['imagen_base64'])
+    except Exception as e:
+        print(f"/img decode error: {e}")
+        return Response(status_code=500)
+
     if thumb == 1:
         try:
             data, mime = _thumb_bytes_any(data, 720)
@@ -289,6 +291,7 @@ async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
             mime = _sniff_mime(data)
     else:
         mime = _sniff_mime(data)
+
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
@@ -299,7 +302,12 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow('SELECT imagen_base64 FROM imagenes_muebles WHERE id=$1', img_id)
     if not row: return Response(status_code=404)
-    data = base64.b64decode(row['imagen_base64'])
+    try:
+        data = base64.b64decode(row['imagen_base64'])
+    except Exception as e:
+        print(f"/img_by_id decode error: {e}")
+        return Response(status_code=500)
+
     if thumb == 1:
         try:
             data, mime = _thumb_bytes_any(data, 720)
@@ -307,6 +315,7 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
             mime = _sniff_mime(data)
     else:
         mime = _sniff_mime(data)
+
     headers, etag = _cache_headers(data)
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
@@ -494,7 +503,7 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                 False,
             )
 
-            # Procesar imágenes con manejo de errores + fallback a JPEG
+            # Procesar imágenes con manejo de errores + fallback (WEBP -> JPEG)
             for i, b in enumerate(images_bytes):
                 try:
                     enc_bytes, _mime = to_best_image_bytes(b)  # WEBP o JPEG
@@ -504,8 +513,7 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                         mid, b64, (i == 0)
                     )
                 except Exception as e:
-                    print(f"Error procesando imagen {i}: {str(e)}")
-                    # Continuar con las siguientes imágenes
+                    print(f"Error procesando imagen {i}: {e}")
                     continue
     return mid
 
@@ -535,8 +543,12 @@ async def delete_mueble(mueble_id: int):
             await conn.execute('DELETE FROM muebles WHERE id=$1', mueble_id)
 
 async def add_image(mueble_id: int, content_bytes: bytes, will_be_principal: bool = False):
-    b_webp = to_webp_bytes(content_bytes)
-    b64 = base64.b64encode(b_webp).decode('utf-8')
+    try:
+        enc_bytes, _mime = to_best_image_bytes(content_bytes)  # WEBP o JPEG
+    except Exception as e:
+        print(f"add_image: no se pudo procesar imagen: {e}")
+        return
+    b64 = base64.b64encode(enc_bytes).decode('utf-8')
     async with app.state.pool.acquire() as conn:
         await conn.execute(
             'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
