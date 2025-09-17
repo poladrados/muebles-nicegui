@@ -16,7 +16,7 @@ from io import BytesIO
 
 load_dotenv()
 PAGE_SIZE = 30
-THUMB_VER = "3"  # cache-buster miniaturas
+THUMB_VER = "4"  # cache-buster miniaturas (subido para forzar recarga)
 BASE_URL = os.getenv('BASE_URL', 'https://inventarioeljueves.app')
 
 # ---------- helpers ----------
@@ -472,7 +472,6 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
                     )
                 except Exception as e:
                     print(f"Error procesando imagen {i}: {str(e)}")
-                    # Continuar con las siguientes imágenes
                     continue
     return mid
 
@@ -1013,6 +1012,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
+
 
 
 
