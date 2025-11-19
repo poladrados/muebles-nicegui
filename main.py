@@ -773,6 +773,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                     ui.label('🆕 Nuevo').style('color:#16a34a; font-weight:700;')
 
             with ui.element('div').classes('card-flex'):
+                # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
                         with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
@@ -786,34 +787,35 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         .classes('card-thumb')\
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
-                # ----- DETALLES (blindado para que un error no pare el resto) -----
+                # ---- DETALLES (sin ui.html, usando componentes)
                 try:
-                    with ui.element('div').classes('card-details'):
-                        _kv_attr('Tipo', _safe(m.get('tipo','')))
-                        _kv_attr('Precio', _fmt_precio(m.get('precio')))
-                        _kv_attr('Tienda', _safe(m.get('tienda','')))
-                        _kv('Medidas', mostrar_medidas_extendido(m))
+                    with ui.column().classes('card-details').style('gap:6px'):
+                        ui.label(f"Tipo: {m.get('tipo') or ''}")
+                        ui.label(f"Precio: {_fmt_precio(m.get('precio'))}")
+                        ui.label(f"Tienda: {m.get('tienda') or ''}")
+                        ui.label(f"Medidas: {mostrar_medidas_extendido(m)}")
                         if m.get('fecha'):
-                            _kv('Fecha registro', _fmt_fecha(m.get('fecha')))
+                            ui.label(f"Fecha registro: {_fmt_fecha(m.get('fecha'))}")
+
                         desc = (m.get('descripcion') or '').strip()
                         if desc:
                             if len(desc) > 220:
-                                _kv_desc(desc[:220] + '…')
+                                ui.label("Descripción: " + desc[:220] + "…")
                                 with ui.expansion('🔎 Ver más'):
                                     ui.label(desc).style('font-size:15px; line-height:1.5;')
                             else:
-                                _kv_desc(desc)
+                                ui.label("Descripción: " + desc)
 
-                        # URL absoluta del compartir (mismo host que el de la sesión)
+                        # Compartir
                         share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
-                        with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
+                        with ui.row().classes('items-center').style('gap:10px; margin-top:4px;'):
                             ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
 
+                        # Acciones admin
                         if is_admin():
                             with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
                                 ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
 
-                                # Usamos la MISMA confirmación de borrado para 'Vendido' y 'Eliminar'
                                 def ask_delete_mueble(_=None, _mid=mid):
                                     with ui.dialog() as dd:
                                         with ui.card():
@@ -825,13 +827,12 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                                 ui.button('Eliminar', color='negative', on_click=do_delete)
                                     dd.open()
 
-                                # '✓ Vendido' = eliminar (misma confirmación)
                                 ui.button('✓ Vendido', on_click=ask_delete_mueble)
                                 ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
                 except Exception as e:
                     print(f"[details err id={mid}]: {e}")
 
-        # ----- CONTADOR DE IMÁGENES (blindado) -----
+        # ---- MÁS IMÁGENES
         try:
             async with app.state.pool.acquire() as conn:
                 total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
@@ -847,6 +848,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                           .props('loading=lazy alt="Miniatura"')\
                           .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+
 
 # ---------- Página ----------
 LOGO_URL = "/muebles-app/images/icon-192.png"
