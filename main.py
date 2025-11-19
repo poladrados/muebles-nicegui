@@ -52,7 +52,7 @@ try:
 except Exception:
     pass
 
-ui.add_head_html("""
+HEAD_HTML = """
 <link rel="manifest" href="/manifest.webmanifest?v=20250906">
 <link rel="icon" type="image/png" sizes="32x32" href="/muebles-app/images/icon-192.png?v=4">
 <link rel="icon" href="/favicon.ico">
@@ -127,7 +127,7 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(badge); });
 })();
 </script>
-""")
+"""
 
 # ---------- DB ----------
 DB_DSN = (
@@ -796,6 +796,7 @@ LOGO_URL = "/muebles-app/images/icon-192.png"
 
 @ui.page('/')
 async def index(request: Request):
+    ui.add_head_html(HEAD_HTML)
     # IMPORTANTE: desregistrar cualquier SW previo y limpiar cachés para cortar bucles de recarga
     ui.run_javascript("""
     if ('serviceWorker' in navigator) {
