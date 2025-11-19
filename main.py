@@ -653,12 +653,15 @@ async def set_principal_image(mueble_id: int, img_id: int):
 def dialog_add_mueble():
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,900px)] max-h-[92vh] overflow-auto p-4'):
         ui.label('Añadir nueva antigüedad').classes('text-xl font-bold')
+
         with ui.grid(columns=2).classes('gap-3'):
             tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
             tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
             nombre = ui.input('Nombre*')
             precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
+
         descripcion = ui.textarea('Descripción').classes('w-full')
+
         ui.label('Medidas (rellena solo las que correspondan)').classes('mt-2 font-medium')
         with ui.grid(columns=3).classes('gap-2'):
             alto = ui.number(label='Alto (cm)', min=0)
@@ -675,18 +678,20 @@ def dialog_add_mueble():
         new_bytes: list[bytes] = []
 
         async def on_upload(e):
-    		content = await _read_upload_bytes(e)
-    		if not content:
-        		ui.notify('No pude leer la imagen subida (vacía). Vuelve a intentarlo.', type='warning')
-        		print('[upload] archivo vacío; event=', {k: type(getattr(e,k)).__name__ for k in dir(e) if not 			k.startswith('_')})
-        		return
-    		new_bytes.append(content)
-    		ui.notify(f'Imagen subida ({len(new_bytes)})')
-    		print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
+            content = await _read_upload_bytes(e)
+            if not content:
+                ui.notify('No pude leer la imagen subida (vacía). Vuelve a intentarlo.', type='warning')
+                print('[upload] archivo vacío; event=',
+                      {k: type(getattr(e, k)).__name__ for k in dir(e) if not k.startswith('_')})
+                return
+            new_bytes.append(content)
+            ui.notify(f'Imagen subida ({len(new_bytes)})')
+            print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
 
-
-        uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True) \
-                     .props('accept="image/*" max-file-size="52428800"')
+        uploader = (
+            ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
+              .props('accept="image/*" max-file-size="52428800"')
+        )
 
         # ======= Guardar (con línea de debug para verificar las imágenes) =======
         async def guardar(_=None):
@@ -721,7 +726,8 @@ def dialog_add_mueble():
             }
 
             # DEBUG: cuántos archivos e incluso tamaños de los bytes
-            print(f"[upload debug] files={len(new_bytes)} sizes={[len(b) for b in new_bytes] if new_bytes else []}")
+            print(f"[upload debug] files={len(new_bytes)} "
+                  f"sizes={[len(b) for b in new_bytes] if new_bytes else []}")
 
             await add_mueble(data, new_bytes)  # aunque no haya imágenes
             ui.notify('¡Mueble añadido!', type='positive')
@@ -732,6 +738,7 @@ def dialog_add_mueble():
         with ui.row().classes('justify-end mt-3'):
             ui.button('Cancelar', on_click=d.close).props('flat')
             ui.button('Guardar', on_click=guardar, color='primary')
+
     return d
 
 
