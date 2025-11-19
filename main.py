@@ -27,22 +27,54 @@ def _origin_from(request: Request) -> str:
     """Origen absoluto fiable del host que ha hecho la petición."""
     # request.base_url == "https://host/"  -> quitamos la barra final
     return str(request.base_url).rstrip('/')
-async def _read_upload_bytes(e):
-    """Devuelve siempre bytes, funcione e.content como bytes o como objeto con .read()."""
+async def _read_upload_bytes(e) -> bytes:
+    """Devuelve los bytes de un UploadEvent de NiceGUI, sea cual sea el formato."""
+    # 1) bytes directos
     c = getattr(e, 'content', None)
-    if c is None:
-        return b''
-    read = getattr(c, 'read', None)
-    if callable(read):
-        maybe = read()
-        if asyncio.iscoroutine(maybe):
-            return await maybe
-        return maybe  # ya son bytes
-    if isinstance(c, (bytes, bytearray)):
+    if isinstance(c, (bytes, bytearray, memoryview)):
         return bytes(c)
-    if isinstance(c, memoryview):
-        return c.tobytes()
-    return bytes(c)
+
+    # 2) UploadFile en e.content o e.file (read() puede ser async)
+    for obj in (c, getattr(e, 'file', None)):
+        if obj is None:
+            continue
+        read = getattr(obj, 'read', None)
+        if callable(read):
+            try:
+                res = read()
+                if asyncio.iscoroutine(res):
+                    res = await res
+                if res:
+                    return bytes(res)
+            except Exception:
+                pass
+
+    # 3) Lista de archivos (NiceGUI recientes)
+    files = getattr(e, 'files', None)
+    if files:
+        for f in files:
+            read = getattr(f, 'read', None)
+            if callable(read):
+                try:
+                    res = read()
+                    if asyncio.iscoroutine(res):
+                        res = await res
+                    if res:
+                        return bytes(res)
+                except Exception:
+                    continue
+
+    # 4) Fallback si se guardó a disco
+    for attr in ('path', 'saved_path', 'tempfile'):
+        p = getattr(e, attr, None)
+        if p and isinstance(p, str) and os.path.exists(p):
+            try:
+                with open(p, 'rb') as fh:
+                    return fh.read()
+            except Exception:
+                pass
+
+    return b''
 
 # ---------- PWA / static ----------
 try:
@@ -643,9 +675,15 @@ def dialog_add_mueble():
         new_bytes: list[bytes] = []
 
         async def on_upload(e):
-            content = await _read_upload_bytes(e)
-            new_bytes.append(content)
-            ui.notify(f'Imagen subida ({len(new_bytes)})')
+    		content = await _read_upload_bytes(e)
+    		if not content:
+        		ui.notify('No pude leer la imagen subida (vacía). Vuelve a intentarlo.', type='warning')
+        		print('[upload] archivo vacío; event=', {k: type(getattr(e,k)).__name__ for k in dir(e) if not 			k.startswith('_')})
+        		return
+    		new_bytes.append(content)
+    		ui.notify(f'Imagen subida ({len(new_bytes)})')
+    		print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
+
 
         uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True) \
                      .props('accept="image/*" max-file-size="52428800"')
