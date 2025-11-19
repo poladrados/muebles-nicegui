@@ -278,6 +278,33 @@ async def img_by_id(request: Request, img_id:int, thumb:int=0):
     if request.headers.get('if-none-match')==etag:
         return Response(status_code=304, headers=headers)
     return Response(content=data, media_type='image/webp', headers=headers)
+# === DEBUG: estado rápido de la base de datos (ELIMINAR luego) ===
+@app.get('/_diag')
+async def _diag():
+    async with app.state.pool.acquire() as conn:
+        total = await conn.fetchval('SELECT COUNT(*) FROM muebles')
+        sold = await conn.fetchval('SELECT COUNT(*) FROM muebles WHERE vendido=TRUE')
+        unsold = await conn.fetchval('SELECT COUNT(*) FROM muebles WHERE vendido=FALSE')
+        by_store = await conn.fetch(
+            'SELECT COALESCE(tienda, \'\') AS tienda, vendido, COUNT(*) AS c '
+            'FROM muebles GROUP BY tienda, vendido ORDER BY tienda, vendido'
+        )
+        sample = await conn.fetch(
+            'SELECT id, nombre, vendido FROM muebles ORDER BY id DESC LIMIT 12'
+        )
+        whoami = {
+            'host': os.getenv("POSTGRES_HOST"),
+            'db': os.getenv("POSTGRES_DB"),
+            'user': os.getenv("POSTGRES_USER"),
+            'port': os.getenv("POSTGRES_PORT"),
+        }
+    return {
+        'whoami': whoami,
+        'total': total, 'unsold': unsold, 'sold': sold,
+        'by_store': [dict(r) for r in by_store],
+        'sample_last12': [dict(r) for r in sample],
+    }
+
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
