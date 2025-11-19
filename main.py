@@ -745,6 +745,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
     origin = (base_origin or BASE_URL).rstrip('/')
 
     for m in rows:
+        m = dict(m)
         mid = int(m['id'])
         with ui.card().style('width:100%; padding:16px;'):
             with ui.row().style('align-items:center; gap:8px; margin-bottom:8px;'):
