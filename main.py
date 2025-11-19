@@ -98,26 +98,31 @@ HEAD_HTML = """
 
 <style>
   input, select, textarea { font-size: 16px !important; }
-/* iOS instalado como app */
-.pwa-standalone body {
-  margin: 0;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  overflow-y: auto;                /* <- permitir scroll */
-  -webkit-overflow-scrolling: touch;
-}
-.pwa-standalone header { padding-top: env(safe-area-inset-top); }
 
-/* App instalada (Android + iOS) */
-@media all and (display-mode: standalone) {
-  html, body {
-    position: static;              /* <- no fijar */
-    width: 100%;
-    height: auto;                  /* <- dejar crecer */
-    min-height: 100%;
-    overflow-y: auto;              /* <- permitir scroll */
-    overscroll-behavior: contain;  /* evita el "rubber band" sin bloquear */
+  /* iOS PWA (cuando hay clase pwa-standalone) */
+  .pwa-standalone body {
+    margin: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow-x: hidden;
+    overflow-y: auto;
   }
-}
+
+  .pwa-standalone header { padding-top: env(safe-area-inset-top); }
+
+  /* Modo app (standalone) en iOS y Android */
+  @media all and (display-mode: standalone) {
+    html, body {
+      position: static;          /* no fixed */
+      width: 100%;
+      height: auto;              /* que crezca */
+      min-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;          /* permitir scroll */
+      -webkit-overflow-scrolling: touch; 
+      overscroll-behavior-y: contain; 
+    }
+  }
 
   @media (max-width: 640px) {
     body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -137,6 +142,7 @@ HEAD_HTML = """
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
 </style>
+
 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
