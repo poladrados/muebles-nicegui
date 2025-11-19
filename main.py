@@ -98,16 +98,27 @@ HEAD_HTML = """
 
 <style>
   input, select, textarea { font-size: 16px !important; }
-  .pwa-standalone body {
-    margin: 0;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    overflow: hidden;
+/* iOS instalado como app */
+.pwa-standalone body {
+  margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow-y: auto;                /* <- permitir scroll */
+  -webkit-overflow-scrolling: touch;
+}
+.pwa-standalone header { padding-top: env(safe-area-inset-top); }
+
+/* App instalada (Android + iOS) */
+@media all and (display-mode: standalone) {
+  html, body {
+    position: static;              /* <- no fijar */
+    width: 100%;
+    height: auto;                  /* <- dejar crecer */
+    min-height: 100%;
+    overflow-y: auto;              /* <- permitir scroll */
+    overscroll-behavior: contain;  /* evita el "rubber band" sin bloquear */
   }
-  .pwa-standalone header { padding-top: env(safe-area-inset-top); }
-  @media all and (display-mode: standalone) {
-    body { -webkit-overflow-scrolling: touch; }
-    html, body { overscroll-behavior: none; position: fixed; width: 100%; height: 100%; }
-  }
+}
+
   @media (max-width: 640px) {
     body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   }
