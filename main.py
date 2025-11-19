@@ -11,7 +11,7 @@ from functools import partial
 from dotenv import load_dotenv
 import pandas as pd
 from datetime import datetime
-from PIL import Image
+from PIL import Image, features
 from io import BytesIO
 
 load_dotenv()
@@ -27,8 +27,6 @@ def _origin_from(request: Request) -> str:
     """Origen absoluto fiable del host que ha hecho la petición."""
     # request.base_url == "https://host/"  -> quitamos la barra final
     return str(request.base_url).rstrip('/')
-
-# >>> NUEVO: helper para leer bytes del uploader, compatible con bytes o UploadFile <<<
 async def _read_upload_bytes(e):
     """Devuelve siempre bytes, funcione e.content como bytes o como objeto con .read()."""
     c = getattr(e, 'content', None)
@@ -192,13 +190,49 @@ def _to_float_or_none(v):
     except Exception:
         return None
 
-def to_webp_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
-    im = Image.open(BytesIO(raw))
-    if im.mode not in ('RGB','RGBA'):
+from PIL import Image, features  # ya importado arriba
+
+def _encode_image_to_webp_or_jpeg(im: Image.Image, max_size=800, quality=85) -> tuple[bytes, str]:
+    """Devuelve (bytes, mime) en WEBP si hay soporte; si no, en JPEG."""
+    if im.mode not in ('RGB', 'RGBA'):
         im = im.convert('RGB')
-    im.thumbnail((max_size,max_size))
-    buf=BytesIO(); im.save(buf, format='WEBP', quality=quality, method=6)
-    return buf.getvalue()
+    im = im.copy()
+    im.thumbnail((max_size, max_size))
+    buf = BytesIO()
+
+    if features.check('webp'):
+        im.save(buf, format='WEBP', quality=quality, method=6)
+        return buf.getvalue(), 'image/webp'
+    else:
+        im = im.convert('RGB')
+        im.save(buf, format='JPEG', quality=quality, optimize=True, progressive=True)
+        return buf.getvalue(), 'image/jpeg'
+
+def to_img_bytes(raw: bytes, max_size=800, quality=85) -> bytes:
+    """Convierte bytes a WEBP o, si no hay soporte, a JPEG."""
+    im = Image.open(BytesIO(raw))
+    data, _mime = _encode_image_to_webp_or_jpeg(im, max_size=max_size, quality=quality)
+    return data
+
+def _thumb_bytes(src: bytes, px=720) -> tuple[bytes, str]:
+    """Thumbnail: devuelve (bytes, mime) en WEBP o JPEG."""
+    im = Image.open(BytesIO(src))
+    data, mime = _encode_image_to_webp_or_jpeg(im, max_size=px, quality=92)
+    return data, mime
+
+def _detect_mime(data: bytes) -> str:
+    """Detecta el Content-Type real de unos bytes de imagen."""
+    try:
+        fmt = Image.open(BytesIO(data)).format or ''
+        fmt = fmt.upper()
+        if fmt == 'WEBP':
+            return 'image/webp'
+        if fmt == 'PNG':
+            return 'image/png'
+        return 'image/jpeg'
+    except Exception:
+        return 'application/octet-stream'
+
 
 def es_nuevo(fecha_val)->bool:
     if not fecha_val: return False
@@ -209,13 +243,6 @@ def es_nuevo(fecha_val)->bool:
     delta=(datetime.now(fecha.tzinfo)-fecha) if fecha.tzinfo else (datetime.now()-fecha)
     return delta.days <= 1
 
-def _thumb_bytes(src: bytes, px=720)->bytes:
-    im = Image.open(BytesIO(src))
-    if im.mode not in ('RGB','RGBA'):
-        im = im.convert('RGB')
-    im.thumbnail((px,px))
-    buf=BytesIO(); im.save(buf,'WEBP',quality=92,method=6)
-    return buf.getvalue()
 
 def _cache_headers(data: bytes):
     etag = 'W/"%s"' % hashlib.md5(data).hexdigest()
@@ -267,35 +294,47 @@ def _fmt_fecha(dt):
     d = _parse_dt(dt)
     return d.strftime("%d/%m/%Y %H:%M") if d else (str(dt) if dt else "")
 
-# ---------- Endpoints de imágenes ----------
 @app.get('/img/{mueble_id}')
-async def img(request: Request, mueble_id:int, i:int=0, thumb:int=0):
+async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT imagen_base64 FROM imagenes_muebles
-             WHERE mueble_id=$1
-             ORDER BY es_principal DESC, id ASC
-             OFFSET $2 LIMIT 1
+            WHERE mueble_id=$1
+            ORDER BY es_principal DESC, id ASC
+            OFFSET $2 LIMIT 1
         """, mueble_id, i)
-    if not row: return Response(status_code=404)
+    if not row:
+        return Response(status_code=404)
+
     data = base64.b64decode(row['imagen_base64'])
-    if thumb==1: data=_thumb_bytes(data,720)
+    if thumb == 1:
+        data, mime = _thumb_bytes(data, 720)
+    else:
+        mime = _detect_mime(data)
+
     headers, etag = _cache_headers(data)
-    if request.headers.get('if-none-match')==etag:
+    if request.headers.get('if-none-match') == etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type='image/webp', headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
 
 @app.get('/img_by_id/{img_id}')
-async def img_by_id(request: Request, img_id:int, thumb:int=0):
+async def img_by_id(request: Request, img_id: int, thumb: int = 0):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow('SELECT imagen_base64 FROM imagenes_muebles WHERE id=$1', img_id)
-    if not row: return Response(status_code=404)
+    if not row:
+        return Response(status_code=404)
+
     data = base64.b64decode(row['imagen_base64'])
-    if thumb==1: data=_thumb_bytes(data,720)
+    if thumb == 1:
+        data, mime = _thumb_bytes(data, 720)
+    else:
+        mime = _detect_mime(data)
+
     headers, etag = _cache_headers(data)
-    if request.headers.get('if-none-match')==etag:
+    if request.headers.get('if-none-match') == etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type='image/webp', headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
+
 # === DEBUG: estado rápido de la base de datos (ELIMINAR luego) ===
 @app.get('/_diag')
 async def _diag():
@@ -509,7 +548,7 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
             # Procesar imágenes con manejo de errores
             for i, b in enumerate(images_bytes):
                 try:
-                    b_webp = to_webp_bytes(b)
+                    b_webp = to_img_bytes(b)
                     b64 = base64.b64encode(b_webp).decode('utf-8')
                     await conn.execute(
                         'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
@@ -546,7 +585,7 @@ async def delete_mueble(mueble_id: int):
             await conn.execute('DELETE FROM muebles WHERE id=$1', mueble_id)
 
 async def add_image(mueble_id: int, content_bytes: bytes, will_be_principal: bool = False):
-    b_webp = to_webp_bytes(content_bytes)
+    b_webp = to_img_bytes(content_bytes)
     b64 = base64.b64encode(b_webp).decode('utf-8')
     async with app.state.pool.acquire() as conn:
         await conn.execute(
