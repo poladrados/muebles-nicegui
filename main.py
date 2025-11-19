@@ -224,19 +224,37 @@ def _cache_headers(data: bytes):
 # ----- Formato ES (precio / fecha) -----
 import math
 
+import math
+
 def _fmt_precio(p):
+    # Vacíos: no muestres nada
+    if p in (None, '', 'None'):
+        return ''
+
+    # Acepta coma decimal
+    s = str(p).strip().replace(',', '.')
     try:
-        n = float(p)
-    except:
+        n = float(s)
+    except Exception:
+        # Cualquier cosa no parseable: muéstralo tal cual + €
         return f"{p} €"
+
+    # No asumir NaN/Inf como número válido
+    if not math.isfinite(n):
+        return ''
+
+    # Entero exacto
     if math.isclose(n, round(n), rel_tol=0, abs_tol=1e-6):
-        s = f"{int(round(n)):,}".replace(",", ".")
-        return f"{s} €"
-    else:
-        entero = int(n); dec = abs(n - entero)
-        s_ent = f"{entero:,}".replace(",", ".")
-        s_dec = f"{dec:.2f}"[1:].replace(".", ",")
-        return f"{s_ent}{s_dec} €"
+        s_ent = f"{int(round(n)):,}".replace(",", ".")
+        return f"{s_ent} €"
+
+    # Con decimales (formato ES)
+    entero = int(n)  # si n es negativo, int ya trunca hacia 0; es OK para mostrar
+    dec = abs(n - entero)
+    s_ent = f"{entero:,}".replace(",", ".")
+    s_dec = f"{dec:.2f}"[1:].replace(".", ",")
+    return f"{s_ent}{s_dec} €"
+
 
 from datetime import datetime
 
@@ -745,8 +763,9 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
     origin = (base_origin or BASE_URL).rstrip('/')
 
     for m in rows:
-        m = dict(m)
+        m = dict(m)  # ← importante para poder usar .get()
         mid = int(m['id'])
+
         with ui.card().style('width:100%; padding:16px;'):
             with ui.row().style('align-items:center; gap:8px; margin-bottom:8px;'):
                 ui.label(str(m['nombre']).upper()).style('font-weight:700; font-size:20px;')
@@ -767,49 +786,59 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         .classes('card-thumb')\
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
-                with ui.element('div').classes('card-details'):
-                    _kv_attr('Tipo', _safe(m.get('tipo','')))
-                    _kv_attr('Precio', _fmt_precio(m.get('precio')))
-                    _kv_attr('Tienda', _safe(m.get('tienda','')))
-                    _kv('Medidas', mostrar_medidas_extendido(m))
-                    if m.get('fecha'):
-                        _kv('Fecha registro', _fmt_fecha(m.get('fecha')))
-                    desc = (m.get('descripcion') or '').strip()
-                    if desc:
-                        if len(desc) > 220:
-                            _kv_desc(desc[:220] + '…')
-                            with ui.expansion('🔎 Ver más'):
-                                ui.label(desc).style('font-size:15px; line-height:1.5;')
-                        else:
-                            _kv_desc(desc)
+                # ----- DETALLES (blindado para que un error no pare el resto) -----
+                try:
+                    with ui.element('div').classes('card-details'):
+                        _kv_attr('Tipo', _safe(m.get('tipo','')))
+                        _kv_attr('Precio', _fmt_precio(m.get('precio')))
+                        _kv_attr('Tienda', _safe(m.get('tienda','')))
+                        _kv('Medidas', mostrar_medidas_extendido(m))
+                        if m.get('fecha'):
+                            _kv('Fecha registro', _fmt_fecha(m.get('fecha')))
+                        desc = (m.get('descripcion') or '').strip()
+                        if desc:
+                            if len(desc) > 220:
+                                _kv_desc(desc[:220] + '…')
+                                with ui.expansion('🔎 Ver más'):
+                                    ui.label(desc).style('font-size:15px; line-height:1.5;')
+                            else:
+                                _kv_desc(desc)
 
-                    # URL absoluta del compartir (mismo host que el de la sesión)
-                    share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
-                    with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
-                        ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
+                        # URL absoluta del compartir (mismo host que el de la sesión)
+                        share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
+                        with ui.element('div').classes('kv kv-line').style('margin-bottom:16px;'):
+                            ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
 
-                    if is_admin():
-                        with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
-                            ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
+                        if is_admin():
+                            with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
+                                ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
 
-                            # Usamos la MISMA confirmación de borrado para 'Vendido' y 'Eliminar'
-                            def ask_delete_mueble(_=None, _mid=mid):
-                                with ui.dialog() as dd:
-                                    with ui.card():
-                                        ui.label('¿Eliminar este mueble?')
-                                        with ui.row().classes('justify-end'):
-                                            ui.button('Cancelar', on_click=dd.close).props('flat')
-                                            async def do_delete(_=None):
-                                                await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
-                                            ui.button('Eliminar', color='negative', on_click=do_delete)
-                                dd.open()
+                                # Usamos la MISMA confirmación de borrado para 'Vendido' y 'Eliminar'
+                                def ask_delete_mueble(_=None, _mid=mid):
+                                    with ui.dialog() as dd:
+                                        with ui.card():
+                                            ui.label('¿Eliminar este mueble?')
+                                            with ui.row().classes('justify-end'):
+                                                ui.button('Cancelar', on_click=dd.close).props('flat')
+                                                async def do_delete(_=None):
+                                                    await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
+                                                ui.button('Eliminar', color='negative', on_click=do_delete)
+                                    dd.open()
 
-                            # '✓ Vendido' = eliminar (misma confirmación)
-                            ui.button('✓ Vendido', on_click=ask_delete_mueble)
-                            ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
+                                # '✓ Vendido' = eliminar (misma confirmación)
+                                ui.button('✓ Vendido', on_click=ask_delete_mueble)
+                                ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
+                except Exception as e:
+                    print(f"[details err id={mid}]: {e}")
 
-        async with app.state.pool.acquire() as conn:
-            total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
+        # ----- CONTADOR DE IMÁGENES (blindado) -----
+        try:
+            async with app.state.pool.acquire() as conn:
+                total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
+        except Exception as e:
+            print(f"[imgcount err id={mid}]: {e}")
+            total_imgs = 0
+
         if total_imgs and total_imgs > 1:
             with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
