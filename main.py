@@ -296,33 +296,31 @@ def _fmt_fecha(dt):
 
 @app.get('/img/{mueble_id}')
 async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
-    async with app.state.pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            SELECT imagen_base64 FROM imagenes_muebles
-            WHERE mueble_id=$1
-            ORDER BY es_principal DESC, id ASC
-            OFFSET $2 LIMIT 1
-        """, mueble_id, i)
-    if not row:
-    print(f"[img] 404 mueble_id={mueble_id} i={i}")
-    return Response(status_code=404)
     try:
-    data = base64.b64decode(row['imagen_base64'])
-except Exception as e:
-    print(f"[img] decode error mid={mueble_id} i={i}: {type(e).__name__}: {e}")
-    return Response(status_code=500)
+        async with app.state.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT imagen_base64 FROM imagenes_muebles
+                WHERE mueble_id=$1
+                ORDER BY es_principal DESC, id ASC
+                OFFSET $2 LIMIT 1
+            """, mueble_id, i)
 
+        if not row:
+            print(f"[img] 404 mid={mueble_id} i={i}")
+            return Response(status_code=404)
 
-    data = base64.b64decode(row['imagen_base64'])
-    if thumb == 1:
-        data, mime = _thumb_bytes(data, 720)
-    else:
-        mime = _detect_mime(data)
+        data = base64.b64decode(row['imagen_base64'])
+        if thumb == 1:
+            data = _thumb_bytes(data, 720)
 
-    headers, etag = _cache_headers(data)
-    if request.headers.get('if-none-match') == etag:
-        return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type=mime, headers=headers)
+        headers, etag = _cache_headers(data)
+        if request.headers.get('if-none-match') == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(content=data, media_type='image/webp', headers=headers)
+    except Exception as e:
+        print(f"[img] ERROR mid={mueble_id} i={i}: {type(e).__name__}: {e}")
+        return Response(status_code=500)
+
 
 @app.get('/img_by_id/{img_id}')
 async def img_by_id(request: Request, img_id: int, thumb: int = 0):
