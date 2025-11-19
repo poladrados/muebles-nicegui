@@ -304,7 +304,14 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
             OFFSET $2 LIMIT 1
         """, mueble_id, i)
     if not row:
-        return Response(status_code=404)
+    print(f"[img] 404 mueble_id={mueble_id} i={i}")
+    return Response(status_code=404)
+    try:
+    data = base64.b64decode(row['imagen_base64'])
+except Exception as e:
+    print(f"[img] decode error mid={mueble_id} i={i}: {type(e).__name__}: {e}")
+    return Response(status_code=500)
+
 
     data = base64.b64decode(row['imagen_base64'])
     if thumb == 1:
@@ -626,18 +633,21 @@ def dialog_add_mueble():
             alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
             alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
             ancho = ui.number(label='Ancho (cm)', min=0)
+
         ui.label('Imágenes (la primera será principal)').classes('mt-2')
         new_bytes: list[bytes] = []
+
         async def on_upload(e):
             content = await _read_upload_bytes(e)
             new_bytes.append(content)
             ui.notify(f'Imagen subida ({len(new_bytes)})')
-        uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)\
+
+        uploader = ui.upload(multiple=True, on_upload=on_upload, auto_upload=True) \
                      .props('accept="image/*" max-file-size="52428800"')
 
-        # ======= ÚNICO CAMBIO: guardar sin validar nombre/precio/imágenes =======
+        # ======= Guardar (con línea de debug para verificar las imágenes) =======
         async def guardar(_=None):
-            # Forzar blur para sincronizar valores, pero sin await (NiceGUI: no es corrutina)
+            # Forzar blur para sincronizar valores
             ui.run_javascript('document.activeElement && document.activeElement.blur()')
             await asyncio.sleep(0.05)
 
@@ -666,14 +676,21 @@ def dialog_add_mueble():
                 'alto_asiento': _none_if_empty_or_zero(alto_asiento.value),
                 'ancho': _none_if_empty_or_zero(ancho.value),
             }
+
+            # DEBUG: cuántos archivos e incluso tamaños de los bytes
+            print(f"[upload debug] files={len(new_bytes)} sizes={[len(b) for b in new_bytes] if new_bytes else []}")
+
             await add_mueble(data, new_bytes)  # aunque no haya imágenes
-            ui.notify('¡Mueble añadido!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+            ui.notify('¡Mueble añadido!', type='positive')
+            d.close()
+            ui.run_javascript('location.reload()')
         # =======================================================================
 
         with ui.row().classes('justify-end mt-3'):
             ui.button('Cancelar', on_click=d.close).props('flat')
             ui.button('Guardar', on_click=guardar, color='primary')
     return d
+
 
 def dialog_edit_mueble(mueble_id: int):
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,1000px)] max-h-[92vh] overflow-auto p-4'):
