@@ -310,13 +310,20 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
             return Response(status_code=404)
 
         data = base64.b64decode(row['imagen_base64'])
+
         if thumb == 1:
-            data = _thumb_bytes(data, 720)
+            # _thumb_bytes devuelve (bytes, mime)
+            data, mime = _thumb_bytes(data, 720)
+        else:
+            # Detecta el tipo real por si guardaste JPEG/PNG
+            mime = _detect_mime(data)
 
         headers, etag = _cache_headers(data)
         if request.headers.get('if-none-match') == etag:
             return Response(status_code=304, headers=headers)
-        return Response(content=data, media_type='image/webp', headers=headers)
+
+        return Response(content=data, media_type=mime, headers=headers)
+
     except Exception as e:
         print(f"[img] ERROR mid={mueble_id} i={i}: {type(e).__name__}: {e}")
         return Response(status_code=500)
