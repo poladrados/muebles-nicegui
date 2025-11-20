@@ -910,7 +910,6 @@ def _kv_desc(value: str):
         f'</div>'
     )
 
-
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
                          orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
                          base_origin: str | None = None):
@@ -936,12 +935,28 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
-                        # Contenido centrado SIN 100vw/100vh para que exista "zona fuera" clicable
-                        with ui.column().style('align-items:center; justify-content:center;'):
+                        # MISMO comportamiento a pantalla completa, pero ahora el contenedor es relativo
+                        with ui.column().style(
+                            'align-items:center; justify-content:center; '
+                            'width:100vw; height:100vh; position:relative;'
+                        ):
                             big = ui.image(f'/img/{mid}?i=0').style(
                                 'max-width:90vw; max-height:90vh; object-fit:contain; '
                                 'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
                             )
+
+                            # Botón de cierre: absoluto dentro del contenedor, notch-safe y con z-index alto
+                            ui.button('✕', on_click=dialog.close) \
+                              .props('flat round size=lg aria-label="Cerrar imagen"') \
+                              .classes('absolute') \
+                              .style(
+                                  'top:12px; right:12px; '
+                                  'top: calc(constant(safe-area-inset-top) + 12px); '
+                                  'top: calc(env(safe-area-inset-top) + 12px); '
+                                  'right: calc(constant(safe-area-inset-right) + 12px); '
+                                  'right: calc(env(safe-area-inset-right) + 12px); '
+                                  'z-index:2147483647; background:rgba(255,255,255,.92);'
+                              )
 
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
                         big_img.set_source(f'/img/{mid_val}?i={index}')
@@ -1013,7 +1028,6 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                           .props('loading=lazy alt="Miniatura"') \
                           .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;') \
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
-
 
 
 
