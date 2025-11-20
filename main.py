@@ -158,6 +158,11 @@ HEAD_HTML = """
     left: calc(env(safe-area-inset-left) + 12px);
   }
 </style>
+<style>
+  @media (max-width: 640px) {
+    .hide-on-mobile { display: none !important; }
+  }
+</style>
 
 <style>
   .safe-top-right {
@@ -933,7 +938,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                     with ui.dialog() as dialog:
                         with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
                             big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
-                        ui.button('✕', on_click=dialog.close).props('flat round').classes('fixed top-3 right-3').style('background:rgba(255,255,255,.85);')
+                        ui.button('✕', on_click=dialog.close).props('flat round').classes('fixed top-3 right-3 hide-on-mobile').style('background:rgba(255,255,255,.85);')
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
                         big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
 
@@ -1234,27 +1239,6 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=int(os.getenv('PORT', '8080')),
         reload=os.getenv('RELOAD', '0') == '1',
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
