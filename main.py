@@ -936,9 +936,17 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
-                        with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
-                            big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
-                        ui.button('✕', on_click=dialog.close).props('flat round').classes('fixed top-3 right-3 hide-on-mobile').style('background:rgba(255,255,255,.85);')
+                        with ui.element('div').classes('relative').style('display:inline-block'):
+                            big = (
+            ui.image(f'/img/{mid}?i=0')
+              .props('draggable="false"')
+              .style(
+                  'max-width:90vw; max-height:80vh; object-fit:contain; '
+                  'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
+              )
+        )
+# (sin botón ✕)
+
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
                         big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
 
