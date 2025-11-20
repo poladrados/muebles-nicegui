@@ -936,23 +936,20 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
-                        with ui.element('div').classes('relative').style('display:inline-block'):
-                            big = (
-            ui.image(f'/img/{mid}?i=0')
-              .props('draggable="false"')
-              .style(
-                  'max-width:90vw; max-height:80vh; object-fit:contain; '
-                  'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
-              )
-        )
-# (sin botón ✕)
+                        # Contenido centrado SIN 100vw/100vh para que exista "zona fuera" clicable
+                        with ui.column().style('align-items:center; justify-content:center;'):
+                            big = ui.image(f'/img/{mid}?i=0').style(
+                                'max-width:90vw; max-height:90vh; object-fit:contain; '
+                                'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
+                            )
 
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
-                        big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
+                        big_img.set_source(f'/img/{mid_val}?i={index}')
+                        dlg.open()
 
-                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
-                        .props('loading=lazy alt="Imagen principal"')\
-                        .classes('card-thumb')\
+                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}') \
+                        .props('loading=lazy alt="Imagen principal"') \
+                        .classes('card-thumb') \
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
                 # ---- DETALLES (sin ui.html, usando componentes)
@@ -1012,10 +1009,11 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
             with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
                     for i in range(1, total_imgs):
-                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
-                          .props('loading=lazy alt="Miniatura"')\
-                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
+                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
+                          .props('loading=lazy alt="Miniatura"') \
+                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;') \
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+
 
 
 
