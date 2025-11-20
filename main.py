@@ -907,13 +907,14 @@ def _kv_desc(value: str):
 
 
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
-                         orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
+                         orden='Más reciente', only_id: int | None = None, limit: int | None = None, offset: int | None = None,
                          base_origin: str | None = None):
     rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset)
     if only_id is not None:
         rows = [r for r in rows if int(r['id']) == int(only_id)]
     if not rows:
-        ui.label('Sin resultados').style('color:#6b7280');  return
+        ui.label('Sin resultados').style('color:#6b7280')
+        return
 
     origin = (base_origin or BASE_URL).rstrip('/')
 
@@ -931,15 +932,26 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
-                        with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
-                            big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
-                        ui.button('✕', on_click=dialog.close).props('flat round').classes('fixed top-3 right-3').style('background:rgba(255,255,255,.85);')
-                    def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
-                        big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
+                        # Contenedor NO a pantalla completa: deja overlay libre para cerrar tocando fuera
+                        with ui.card().classes('relative p-0').style('background:transparent; box-shadow:none;'):
+                            # Botón de cierre dentro del card (siempre clicable)
+                            ui.button(on_click=dialog.close) \
+                                .props('icon=close flat round dense aria-label="Cerrar imagen"') \
+                                .classes('absolute') \
+                                .style('top:8px; right:8px; background:rgba(255,255,255,.9); backdrop-filter:blur(4px);')
 
-                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
-                        .props('loading=lazy alt="Imagen principal"')\
-                        .classes('card-thumb')\
+                            # Imagen grande contenida (sin ocupar todo el viewport)
+                            big = ui.image(f'/img/{mid}?i=0') \
+                                .style('max-width:92vw; max-height:88vh; object-fit:contain; border-radius:10px; '
+                                       'box-shadow:0 0 20px rgba(0,0,0,.2);')
+
+                    def open_with(index: int, big_img=big, mid_val=mid, dlg=dialog):
+                        big_img.set_source(f'/img/{mid_val}?i={index}')
+                        dlg.open()
+
+                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}') \
+                        .props('loading=lazy alt="Imagen principal"') \
+                        .classes('card-thumb') \
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
                 # ---- DETALLES (sin ui.html, usando componentes)
@@ -977,9 +989,14 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                             ui.label('¿Eliminar este mueble?')
                                             with ui.row().classes('justify-end'):
                                                 ui.button('Cancelar', on_click=dd.close).props('flat')
+
                                                 async def do_delete(_=None):
-                                                    await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
+                                                    await delete_mueble(_mid)
+                                                    dd.close()
+                                                    ui.run_javascript('location.reload()')
+
                                                 ui.button('Eliminar', color='negative', on_click=do_delete)
+
                                     dd.open()
 
                                 ui.button('✓ Vendido', on_click=ask_delete_mueble)
@@ -999,10 +1016,11 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
             with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
                     for i in range(1, total_imgs):
-                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}')\
-                          .props('loading=lazy alt="Miniatura"')\
-                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
-                          .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
+                            .props('loading=lazy alt="Miniatura"') \
+                            .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;') \
+                            .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+
 
 
 # ---------- Página ----------
