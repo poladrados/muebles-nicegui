@@ -142,6 +142,34 @@ HEAD_HTML = """
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
 </style>
+<style>
+  /* Botón flotante que respeta los safe areas en PWA */
+  .safe-top-left {
+    position: fixed;
+    z-index: 2147483647;
+
+    /* Fallback para navegadores sin safe-area */
+    top: 12px; left: 12px;
+
+    /* Soporte iOS antiguo y moderno */
+    top: calc(constant(safe-area-inset-top) + 12px);
+    top: calc(env(safe-area-inset-top) + 12px);
+    left: calc(constant(safe-area-inset-left) + 12px);
+    left: calc(env(safe-area-inset-left) + 12px);
+  }
+</style>
+
+<style>
+  .safe-top-right {
+    position: absolute;
+    z-index: 2147483647;
+    right: 12px; top: 12px;
+    right: calc(constant(safe-area-inset-right) + 12px);
+    right: calc(env(safe-area-inset-right) + 12px);
+    top: calc(constant(safe-area-inset-top) + 12px);
+    top: calc(env(safe-area-inset-top) + 12px);
+  }
+</style>
 
 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
@@ -1005,7 +1033,10 @@ async def index(request: Request):
     # Drawer admin
     with ui.left_drawer(value=False) as drawer:
         drawer.props('overlay')
-        ui.button(on_click=lambda: drawer.set_value(False)).props('icon=close flat round').classes('absolute right-2 top-2')
+        ui.button(on_click=lambda: drawer.set_value(False)) \
+            .props('icon=close flat round size=md aria-label="Cerrar panel"') \
+            .classes('safe-top-right bg-white')
+
         ui.label('Panel').classes('text-h6 q-pa-md')
 
         if not is_admin():
@@ -1055,8 +1086,10 @@ async def index(request: Request):
 
             ui.timer(0.1, lambda: asyncio.create_task(cargar_stats()), once=True)
 
-    ui.button(on_click=drawer.toggle).props('icon=menu flat round')\
-        .classes('fixed top-2 left-2 z-50 bg-white')
+    ui.button(on_click=drawer.toggle) \
+        .props('icon=menu flat round size=lg aria-label="Abrir panel"') \
+        .classes('safe-top-left bg-white')
+
 
     with ui.element('div').style('min-height:100vh; width:100%; background:#E6F0F8; display:flex; flex-direction:column; align-items:center;'):
         with ui.element('div').style('width:100%; max-width:1200px; padding:0 16px;'):
