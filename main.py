@@ -931,17 +931,27 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 # ---- imagen principal + diálogo
                 with ui.element('div').classes('card-main'):
                     with ui.dialog() as dialog:
-                        with ui.card().classes('relative p-0').style('background:transparent; box-shadow:none;'):
-                            big = ui.image(f'/img/{mid}?i=0') \
-                                .style('max-width:92vw; max-height:88vh; object-fit:contain; border-radius:10px; '
-                                       'box-shadow:0 0 20px rgba(0,0,0,.2);')
+                        with ui.column().style('align-items:center; justify-content:center; width:100vw; height:100vh;'):
+                            big = ui.image(f'/img/{mid}?i=0').style('max-width:90vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);')
+                        # X FIX: respeta notch/safe-areas (iOS) y queda siempre clicable
+                        ui.button('✕', on_click=dialog.close) \
+                          .props('flat round') \
+                          .classes('z-50') \
+                          .style(
+                              'position:fixed;'
+                              # fallbacks
+                              'top:12px; right:12px;'
+                              # iOS antiguos (constant) y modernos (env)
+                              'top:calc(constant(safe-area-inset-top) + 12px);'
+                              'top:calc(env(safe-area-inset-top) + 12px);'
+                              'right:calc(constant(safe-area-inset-right) + 12px);'
+                              'right:calc(env(safe-area-inset-right) + 12px);'
+                              'background:rgba(255,255,255,.9);'
+                              'backdrop-filter:blur(4px);'
+                              'border-radius:9999px;'
+                          )
                     def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
                         big_img.set_source(f'/img/{mid_val}?i={index}');  dlg.open()
-
-                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}')\
-                        .props('loading=lazy alt="Imagen principal"')\
-                        .classes('card-thumb')\
-                        .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
                 # ---- DETALLES (sin ui.html, usando componentes)
                 try:
@@ -1004,9 +1014,6 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                           .props('loading=lazy alt="Miniatura"')\
                           .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;')\
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
-
-
-
 
 
 # ---------- Página ----------
