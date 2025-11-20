@@ -161,15 +161,19 @@ HEAD_HTML = """
 
 <style>
   .safe-top-right {
-    position: absolute;
+    position: absolute;             /* relativo al drawer */
     z-index: 2147483647;
-    right: 12px; top: 12px;
-    right: calc(constant(safe-area-inset-right) + 12px);
-    right: calc(env(safe-area-inset-right) + 12px);
-    top: calc(constant(safe-area-inset-top) + 12px);
-    top: calc(env(safe-area-inset-top) + 12px);
+
+    /* Fallback cómodo dentro del drawer */
+    top: 10px; right: 10px;
+
+    /* Solo compensamos notch por arriba; en el lado derecho NO aplicamos safe-area
+       porque estamos dentro de un panel lateral, no en el borde de pantalla */
+    top: calc(constant(safe-area-inset-top) + 10px);
+    top: calc(env(safe-area-inset-top) + 10px);
   }
 </style>
+
 
 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
@@ -1087,8 +1091,9 @@ async def index(request: Request):
             ui.timer(0.1, lambda: asyncio.create_task(cargar_stats()), once=True)
 
     ui.button(on_click=drawer.toggle) \
-        .props('icon=menu flat round size=lg aria-label="Abrir panel"') \
+        .props('icon=menu flat round size=md dense aria-label="Abrir panel"') \
         .classes('safe-top-left bg-white')
+
 
 
     with ui.element('div').style('min-height:100vh; width:100%; background:#E6F0F8; display:flex; flex-direction:column; align-items:center;'):
