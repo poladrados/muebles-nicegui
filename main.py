@@ -97,7 +97,44 @@ HEAD_HTML = """
 <meta name="format-detection" content="telephone=no">
 
 <style>
+  /* ============================================================
+     Inventario El Jueves — Sistema de diseño editorial
+     Concepto: catálogo de subastas / cartela de museo
+     ============================================================ */
+  :root {
+    --bg:        #E6F0F8;
+    --ink:       #023e8a;
+    --ink-deep:  #021f4d;
+    --paper:    #FBF8F3;
+    --paper-2:  #F5EFE3;
+    --brass:    #A07A2E;
+    --brass-2:  #C9A24A;
+    --brass-soft:#D9C79B;
+    --text:     #1A2438;
+    --text-soft:#5A6478;
+    --hairline: rgba(160,122,46,.28);
+    --hairline-strong: rgba(160,122,46,.55);
+    --shadow-card: 0 1px 0 rgba(160,122,46,.08), 0 8px 24px -12px rgba(2,31,77,.18), 0 2px 6px -3px rgba(2,31,77,.10);
+    --shadow-card-hover: 0 1px 0 rgba(160,122,46,.16), 0 18px 40px -18px rgba(2,31,77,.28), 0 4px 12px -4px rgba(2,31,77,.14);
+  }
+
   input, select, textarea { font-size: 16px !important; }
+
+  /* Tipografía base */
+  body, .nicegui-content, .q-page, .q-card {
+    font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body { background: var(--bg) !important; }
+  ::selection { background: var(--ink); color: var(--paper); }
+
+  /* Scrollbar refinada (webkit) */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--brass); }
 
   /* iOS PWA (cuando hay clase pwa-standalone) */
   .pwa-standalone body {
@@ -107,40 +144,383 @@ HEAD_HTML = """
     overflow-x: hidden;
     overflow-y: auto;
   }
-
   .pwa-standalone header { padding-top: env(safe-area-inset-top); }
 
   /* Modo app (standalone) en iOS y Android */
   @media all and (display-mode: standalone) {
     html, body {
-      position: static;          /* no fixed */
+      position: static;
       width: 100%;
-      height: auto;              /* que crezca */
+      height: auto;
       min-height: 100%;
       overflow-x: hidden;
-      overflow-y: auto;          /* permitir scroll */
-      -webkit-overflow-scrolling: touch; 
-      overscroll-behavior-y: contain; 
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
     }
   }
 
   @media (max-width: 640px) {
     body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   }
-  .kv{margin:0;}
-  .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
-  .kv-desc .v { font-size: 1.05rem; line-height: 1.5; }
-  .kv-attr, .kv-line { padding-bottom: 0 !important; line-height: 1.5; }
+
+  /* ============================================================
+     HEADER editorial
+     ============================================================ */
+  .site-header {
+    width: 100%;
+    background: var(--paper);
+    margin: 24px 0 28px;
+    border-top: 1px solid var(--hairline-strong);
+    border-bottom: 1px solid var(--hairline-strong);
+    box-shadow: var(--shadow-card);
+    position: relative;
+  }
+  .site-header::before, .site-header::after {
+    content: "";
+    position: absolute; left: 0; right: 0; height: 1px;
+    background: var(--hairline);
+  }
+  .site-header::before { top: 4px; }
+  .site-header::after  { bottom: 4px; }
+  .site-header-inner {
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px; padding: 22px 28px; text-align: center;
+  }
+  .site-header-logo {
+    height: clamp(34px, 4.8vw, 54px);
+    width: auto;
+    filter: drop-shadow(0 1px 2px rgba(2,31,77,.18));
+  }
+  .site-header-ornament {
+    color: var(--brass);
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    line-height: 1;
+    opacity: .85;
+  }
+  .site-header-title {
+    font-family: 'Playfair Display', serif !important;
+    font-weight: 700;
+    color: var(--ink) !important;
+    font-size: clamp(20px, 3.2vw, 32px) !important;
+    letter-spacing: .01em;
+    margin: 0 !important;
+    line-height: 1.15;
+  }
+
+  /* ============================================================
+     CARD de mueble (cartela de museo)
+     ============================================================ */
+  .mueble-card.q-card {
+    width: 100%;
+    background: var(--paper) !important;
+    border: 1px solid var(--hairline);
+    border-radius: 4px !important;
+    box-shadow: var(--shadow-card);
+    padding: 22px 24px !important;
+    margin-bottom: 18px;
+    transition: box-shadow .35s ease, transform .35s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .mueble-card.q-card::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--brass) 50%, transparent);
+    opacity: .55;
+  }
+  .mueble-card.q-card:hover { box-shadow: var(--shadow-card-hover); }
+
+  /* Cabecera de card: título + precio */
+  .mueble-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 18px; flex-wrap: wrap;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .mueble-title.q-label, .mueble-title {
+    font-family: 'Playfair Display', serif !important;
+    font-weight: 700 !important;
+    font-size: clamp(20px, 2.6vw, 26px) !important;
+    color: var(--ink) !important;
+    line-height: 1.2 !important;
+    letter-spacing: .005em;
+    text-transform: none !important;
+  }
+  .mueble-price {
+    font-family: 'Playfair Display', serif !important;
+    font-weight: 700 !important;
+    font-size: clamp(22px, 3vw, 30px) !important;
+    color: var(--brass) !important;
+    letter-spacing: .01em;
+    line-height: 1 !important;
+    white-space: nowrap;
+  }
+  .mueble-badge-nuevo {
+    display: inline-block;
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--paper) !important;
+    background: var(--ink) !important;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-left: 10px;
+    vertical-align: middle;
+  }
+
+  /* Pares etiqueta / valor */
+  .kv-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px;
+    padding: 6px 0;
+    align-items: baseline;
+    border-bottom: 1px dotted var(--hairline);
+  }
+  .kv-row:last-of-type { border-bottom: none; }
+  .kv-label.q-label, .kv-label {
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--brass) !important;
+    line-height: 1.4 !important;
+  }
+  .kv-value.q-label, .kv-value {
+    font-family: 'Cormorant Garamond', Georgia, serif !important;
+    font-size: 17px !important;
+    color: var(--text) !important;
+    line-height: 1.45 !important;
+    font-weight: 500;
+  }
+  .kv-value-desc { font-style: italic; color: var(--text-soft) !important; }
+  @media (max-width: 640px) {
+    .kv-row { grid-template-columns: 100px 1fr; gap: 10px; }
+    .kv-value.q-label, .kv-value { font-size: 16px !important; }
+  }
+
+  /* Acciones (WhatsApp, admin) */
+  .mueble-actions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--hairline);
+    align-items: center;
+  }
+  .mueble-actions-admin { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* WhatsApp pill */
+  .btn-whatsapp {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--brass) !important;
+    background: transparent;
+    border: 1px solid var(--hairline-strong);
+    padding: 7px 14px;
+    border-radius: 999px;
+    text-decoration: none !important;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+    cursor: pointer;
+  }
+  .btn-whatsapp:hover {
+    background: var(--brass);
+    color: var(--paper) !important;
+    border-color: var(--brass);
+  }
+  .btn-whatsapp svg { width: 14px; height: 14px; flex: 0 0 auto; }
+
+  /* Botones admin "ghost" — discretos, brass outline */
+  .btn-ghost.q-btn {
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--brass) !important;
+    background: transparent !important;
+    border: 1px solid var(--hairline-strong) !important;
+    border-radius: 999px !important;
+    padding: 6px 14px !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .btn-ghost.q-btn .q-btn__content { padding: 0 !important; }
+  .btn-ghost.q-btn:hover {
+    background: var(--brass) !important;
+    color: var(--paper) !important;
+    border-color: var(--brass) !important;
+  }
+  .btn-ghost-danger.q-btn { color: #8a2e2e !important; border-color: rgba(138,46,46,.4) !important; }
+  .btn-ghost-danger.q-btn:hover { background: #8a2e2e !important; color: var(--paper) !important; border-color: #8a2e2e !important; }
+
+  /* Botón hamburguesa refinado */
+  .hamburger-btn.q-btn {
+    width: 44px; height: 44px;
+    border-radius: 999px !important;
+    border: 1px solid var(--hairline-strong) !important;
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+    box-shadow: 0 2px 8px rgba(2,31,77,.15) !important;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .hamburger-btn.q-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2,31,77,.22) !important;
+  }
+
+  /* Botón primario "Añadir nueva antigüedad" */
+  .btn-primary-editorial.q-btn {
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--paper) !important;
+    background: var(--ink) !important;
+    border: 1px solid var(--ink) !important;
+    border-radius: 2px !important;
+    padding: 10px 22px !important;
+    box-shadow: 0 2px 6px rgba(2,31,77,.25) !important;
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  .btn-primary-editorial.q-btn:hover {
+    background: var(--ink-deep) !important;
+    box-shadow: 0 4px 12px rgba(2,31,77,.35) !important;
+  }
+
+  /* ============================================================
+     FILTROS — panel editorial
+     ============================================================ */
+  .filtros-panel {
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 18px 22px 14px;
+    margin-bottom: 22px;
+    box-shadow: var(--shadow-card);
+    position: relative;
+  }
+  .filtros-panel::before {
+    content: "Filtrar el inventario";
+    position: absolute; top: -10px; left: 22px;
+    background: var(--paper);
+    padding: 0 10px;
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .25em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+  .filtros-panel .q-field__control {
+    background: transparent !important;
+    border-bottom: 1px solid var(--hairline-strong) !important;
+    border-radius: 0 !important;
+    padding: 0 4px !important;
+    min-height: 42px !important;
+  }
+  .filtros-panel .q-field__control::before,
+  .filtros-panel .q-field__control::after { display: none !important; }
+  .filtros-panel .q-field__label {
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--brass) !important;
+  }
+  .filtros-panel .q-field__native,
+  .filtros-panel .q-field__input {
+    font-family: 'Cormorant Garamond', Georgia, serif !important;
+    font-size: 17px !important;
+    color: var(--text) !important;
+  }
+  .filtros-panel .q-field--focused .q-field__control { border-bottom-color: var(--ink) !important; }
+  .filtros-panel .q-field--focused .q-field__label { color: var(--ink) !important; }
+
+  /* ============================================================
+     EXPANSION — "Ver más imágenes" / "Ver más"
+     ============================================================ */
+  .editorial-expansion.q-expansion-item {
+    margin-top: 14px;
+    border-top: 1px solid var(--hairline);
+  }
+  .editorial-expansion .q-expansion-item__container > .q-item {
+    background: transparent !important;
+    padding: 12px 4px !important;
+    min-height: 0 !important;
+  }
+  .editorial-expansion .q-item__label {
+    font-family: 'Inter Tight', system-ui, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--brass) !important;
+  }
+  .editorial-expansion .q-expansion-item__toggle-icon { color: var(--brass) !important; }
+  .editorial-expansion .q-expansion-item__content {
+    background: transparent !important;
+    padding: 8px 4px 4px !important;
+  }
+
+  /* ============================================================
+     ANIMACIÓN DE ENTRADA — stagger sutil
+     ============================================================ */
+  @keyframes mueble-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .mueble-card.q-card {
+    animation: mueble-fade-in .55s cubic-bezier(.2,.6,.2,1) both;
+  }
+  .mueble-card.q-card:nth-of-type(1) { animation-delay: .02s; }
+  .mueble-card.q-card:nth-of-type(2) { animation-delay: .08s; }
+  .mueble-card.q-card:nth-of-type(3) { animation-delay: .14s; }
+  .mueble-card.q-card:nth-of-type(4) { animation-delay: .20s; }
+  .mueble-card.q-card:nth-of-type(5) { animation-delay: .26s; }
+  .mueble-card.q-card:nth-of-type(n+6) { animation-delay: .32s; }
+  @media (prefers-reduced-motion: reduce) {
+    .mueble-card.q-card { animation: none; }
+  }
+
+  /* ============================================================
+     Layout responsive existente — preservado
+     ============================================================ */
   .card-flex { display:flex; gap:24px; align-items:flex-start; flex-wrap:nowrap; }
   .card-main { flex:0 0 auto; width:clamp(280px, 36vw, 520px); }
   .card-details { flex:1 1 320px; min-width:300px; }
-  .card-thumb { width:100%; height:240px; object-fit:cover; border-radius:8px; cursor:zoom-in; }
+  .card-thumb {
+    width:100%; height:240px; object-fit:cover;
+    border-radius: 3px;
+    cursor:zoom-in;
+    box-shadow: 0 6px 18px -8px rgba(2,31,77,.35), 0 1px 0 var(--hairline);
+    transition: transform .4s ease, box-shadow .4s ease;
+  }
+  .card-thumb:hover { transform: scale(1.015); box-shadow: 0 12px 28px -10px rgba(2,31,77,.45); }
   @media (max-width: 640px) {
     .card-flex { flex-wrap:wrap !important; }
     .card-main { width:100% !important; }
     .card-details { flex:1 1 100% !important; min-width:0 !important; }
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
+
+  /* Compatibilidad clases antiguas (por si quedan referencias) */
+  .kv{margin:0;}
+  .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
+  .kv-desc .v { font-size: 1.05rem; line-height: 1.5; }
+  .kv-attr, .kv-line { padding-bottom: 0 !important; line-height: 1.5; }
 </style>
 <style>
   /* Botón flotante que respeta los safe areas en PWA */
@@ -181,7 +561,9 @@ HEAD_HTML = """
 
 
 
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
 
 <script>
 if (window.navigator.standalone === true) {
@@ -194,7 +576,7 @@ var _paq = window._paq = window._paq || [];
 _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
 // Matomo
 (function() {
-  var u="https://inventarioeljueves.matomo.cloud/";
+  var u="__MATOMO_URL__";
   _paq.push(['setTrackerUrl', u+'matomo.php']);
   _paq.push(['setSiteId', '1']);
   var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
@@ -202,7 +584,7 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   s.parentNode.insertBefore(g,s);
 })();
 </script>
-"""
+""".replace('__MATOMO_URL__', os.getenv('MATOMO_URL', 'https://inventarioeljueves.matomo.cloud/'))
 
 # ---------- DB ----------
 DB_DSN = (
@@ -888,11 +1270,14 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
         m = dict(m)  # ← importante para poder usar .get()
         mid = int(m['id'])
 
-        with ui.card().style('width:100%; padding:16px;'):
-            with ui.row().style('align-items:center; gap:8px; margin-bottom:8px;'):
-                ui.label(str(m['nombre']).upper()).style('font-weight:700; font-size:20px;')
-                if es_nuevo(m.get('fecha')):
-                    ui.label('🆕 Nuevo').style('color:#16a34a; font-weight:700;')
+        with ui.card().classes('mueble-card'):
+            # ---- Cabecera: título + precio + badge nuevo
+            with ui.element('div').classes('mueble-head'):
+                with ui.element('div').style('flex:1 1 auto; min-width:0;'):
+                    nombre_html = html.escape(str(m['nombre']))
+                    nuevo_html = '<span class="mueble-badge-nuevo">Nuevo</span>' if es_nuevo(m.get('fecha')) else ''
+                    ui.html(f'<div class="mueble-title">{nombre_html}{nuevo_html}</div>')
+                ui.html(f'<div class="mueble-price">{html.escape(_fmt_precio(m.get("precio")))}</div>')
 
             with ui.element('div').classes('card-flex'):
                 # ---- imagen principal + diálogo
@@ -930,48 +1315,64 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         .classes('card-thumb') \
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
-                # ---- DETALLES (sin ui.html, usando componentes)
+                # ---- DETALLES (sin HTML raw — pares etiqueta/valor seguros)
                 try:
-                    with ui.column().classes('card-details').style('gap:6px'):
-                        ui.label(f"Tipo: {m.get('tipo') or ''}")
-                        ui.label(f"Precio: {_fmt_precio(m.get('precio'))}")
-                        ui.label(f"Tienda: {m.get('tienda') or ''}")
-                        ui.label(f"Medidas: {mostrar_medidas_extendido(m)}")
+                    with ui.column().classes('card-details').style('gap:0;'):
+                        def kv(label: str, value: str):
+                            with ui.element('div').classes('kv-row'):
+                                ui.label(label).classes('kv-label')
+                                ui.label(value).classes('kv-value')
+
+                        kv('Tipo', m.get('tipo') or '—')
+                        kv('Tienda', m.get('tienda') or '—')
+                        kv('Medidas', mostrar_medidas_extendido(m))
                         if m.get('fecha'):
-                            ui.label(f"Fecha registro: {_fmt_fecha(m.get('fecha'))}")
+                            kv('Registro', _fmt_fecha(m.get('fecha')))
 
                         desc = (m.get('descripcion') or '').strip()
                         if desc:
                             if len(desc) > 220:
-                                ui.label("Descripción: " + desc[:220] + "…")
-                                with ui.expansion('🔎 Ver más'):
-                                    ui.label(desc).style('font-size:15px; line-height:1.5;')
+                                with ui.element('div').classes('kv-row'):
+                                    ui.label('Descripción').classes('kv-label')
+                                    ui.label(desc[:220] + '…').classes('kv-value kv-value-desc')
+                                with ui.expansion('Leer descripción completa').classes('editorial-expansion'):
+                                    ui.label(desc).classes('kv-value kv-value-desc') \
+                                        .style('font-size:17px; line-height:1.55;')
                             else:
-                                ui.label("Descripción: " + desc)
+                                with ui.element('div').classes('kv-row'):
+                                    ui.label('Descripción').classes('kv-label')
+                                    ui.label(desc).classes('kv-value kv-value-desc')
 
-                        # Compartir
+                        # ---- Acciones (WhatsApp + admin)
                         share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
-                        with ui.row().classes('items-center').style('gap:10px; margin-top:4px;'):
-                            ui.link('📱 WhatsApp', f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}")
+                        wa_url = f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}"
+                        with ui.element('div').classes('mueble-actions'):
+                            ui.html(
+                                f'<a class="btn-whatsapp" href="{html.escape(wa_url)}" '
+                                f'target="_blank" rel="noopener" aria-label="Compartir por WhatsApp">'
+                                f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+                                f'<path d="M19.05 4.91A10 10 0 0 0 12.04 2C6.6 2 2.17 6.43 2.17 11.87c0 1.74.46 3.45 1.34 4.95L2.1 22l5.31-1.39a9.85 9.85 0 0 0 4.63 1.18h.01c5.44 0 9.86-4.43 9.86-9.87a9.82 9.82 0 0 0-2.86-7.01zM12.05 20.13h-.01a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.15.82.84-3.07-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.53 3.68-8.2 8.21-8.2 2.19 0 4.25.86 5.81 2.41a8.17 8.17 0 0 1 2.4 5.81c0 4.53-3.68 8.2-8.16 8.24zm4.5-6.16c-.25-.13-1.46-.72-1.69-.8-.23-.08-.39-.13-.56.13-.16.25-.64.8-.78.96-.14.16-.29.18-.54.06-.25-.13-1.04-.38-1.98-1.22-.73-.65-1.23-1.46-1.37-1.71-.14-.25-.01-.39.11-.51.11-.11.25-.29.37-.43.13-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.23.25-.85.83-.85 2.03 0 1.2.87 2.36.99 2.52.13.16 1.72 2.62 4.16 3.67.58.25 1.04.4 1.39.51.59.19 1.12.16 1.55.1.47-.07 1.46-.6 1.66-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.16-.46-.29z"/>'
+                                f'</svg><span>Compartir por WhatsApp</span></a>'
+                            )
 
-                        # Acciones admin
-                        if is_admin():
-                            with ui.row().style('gap:8px; justify-content:flex-end; margin-top:8px;'):
-                                ui.button('✏️ Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open())
+                            if is_admin():
+                                with ui.element('div').classes('mueble-actions-admin'):
+                                    ui.button('Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open()) \
+                                        .classes('btn-ghost')
 
-                                def ask_delete_mueble(_=None, _mid=mid):
-                                    with ui.dialog() as dd:
-                                        with ui.card():
-                                            ui.label('¿Eliminar este mueble?')
-                                            with ui.row().classes('justify-end'):
-                                                ui.button('Cancelar', on_click=dd.close).props('flat')
-                                                async def do_delete(_=None):
-                                                    await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
-                                                ui.button('Eliminar', color='negative', on_click=do_delete)
-                                    dd.open()
+                                    def ask_delete_mueble(_=None, _mid=mid):
+                                        with ui.dialog() as dd:
+                                            with ui.card():
+                                                ui.label('¿Eliminar este mueble?')
+                                                with ui.row().classes('justify-end'):
+                                                    ui.button('Cancelar', on_click=dd.close).props('flat')
+                                                    async def do_delete(_=None):
+                                                        await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
+                                                    ui.button('Eliminar', color='negative', on_click=do_delete)
+                                        dd.open()
 
-                                ui.button('✓ Vendido', on_click=ask_delete_mueble)
-                                ui.button('🗑 Eliminar', color='negative', on_click=ask_delete_mueble)
+                                    ui.button('Vendido', on_click=ask_delete_mueble).classes('btn-ghost')
+                                    ui.button('Eliminar', on_click=ask_delete_mueble).classes('btn-ghost btn-ghost-danger')
                 except Exception as e:
                     print(f"[details err id={mid}]: {e}")
 
@@ -984,12 +1385,12 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
             total_imgs = 0
 
         if total_imgs and total_imgs > 1:
-            with ui.expansion(f"📸 Ver más imágenes ({total_imgs-1})"):
+            with ui.expansion(f"Ver más imágenes ({total_imgs-1})").classes('editorial-expansion'):
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
                     for i in range(1, total_imgs):
                         ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
                           .props('loading=lazy alt="Miniatura"') \
-                          .style('width:120px; height:120px; object-fit:cover; border-radius:8px; cursor:zoom-in;') \
+                          .style('width:120px; height:120px; object-fit:cover; border-radius:3px; cursor:zoom-in; box-shadow:0 4px 12px -6px rgba(2,31,77,.35);') \
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
 
 
@@ -1081,28 +1482,28 @@ async def index(request: Request):
 
     ui.button(on_click=drawer.toggle) \
         .props('icon=menu flat round size=md dense aria-label="Abrir panel"') \
-        .classes('safe-top-left bg-white')
+        .classes('safe-top-left hamburger-btn')
 
 
 
     with ui.element('div').style('min-height:100vh; width:100%; background:#E6F0F8; display:flex; flex-direction:column; align-items:center;'):
         with ui.element('div').style('width:100%; max-width:1200px; padding:0 16px;'):
-            with ui.element('div').style('width:100%; background:#fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.1); margin:20px 0;'):
-                with ui.element('div').style('display:flex; align-items:center; justify-content:center; gap:12px; text-align:center; padding:10px 24px;'):
-                    ui.image(LOGO_URL).style('height:clamp(32px, 4.8vw, 54px); width:auto;')
-                    ui.label('Inventario de Antigüedades El Jueves').style(
-                        'font-family:"Playfair Display",serif; font-weight:700; letter-spacing:1px; '
-                        'color:#023e8a; font-size:clamp(1.4rem, 2.2vw, 2.1rem); line-height:1; margin:0;'
-                    )
+            with ui.element('div').classes('site-header'):
+                with ui.element('div').classes('site-header-inner'):
+                    ui.image(LOGO_URL).classes('site-header-logo')
+                    ui.html('<span class="site-header-ornament">❦</span>')
+                    ui.label('Inventario de Antigüedades El Jueves').classes('site-header-title')
 
             if is_admin():
-                ui.button('➕ Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()).classes('q-mb-md')
+                ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()) \
+                    .classes('btn-primary-editorial q-mb-md')
 
-            with ui.row().style('gap:12px; margin-bottom:16px;'):
-                filtro_nombre = ui.input('Buscar por nombre').props('clearable')
-                filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda')
-                filtro_tipo = ui.select(['Todos'], value='Todos', label='Filtrar por tipo')
-                orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por')
+            with ui.element('div').classes('filtros-panel'):
+                with ui.row().style('gap:18px; flex-wrap:wrap;'):
+                    filtro_nombre = ui.input('Buscar por nombre').props('clearable').style('min-width:200px;')
+                    filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda').style('min-width:180px;')
+                    filtro_tipo = ui.select(['Todos'], value='Todos', label='Filtrar por tipo').style('min-width:180px;')
+                    orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por').style('min-width:180px;')
 
             # --- cargar opciones de tipo sin timer y forzar update ---
             try:
