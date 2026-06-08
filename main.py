@@ -201,15 +201,6 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   g.async=true; g.src='https://cdn.matomo.cloud/inventarioeljueves.matomo.cloud/matomo.js';
   s.parentNode.insertBefore(g,s);
 })();
-
-// Debug badge (sin errores de sintaxis)
-(function () {
-  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
-  var badge = document.createElement('div');
-  badge.textContent = 'standalone: ' + standalone;
-  badge.style.cssText = 'position:fixed;bottom:8px;left:8px;background:#111;color:#0f0;padding:6px 8px;font:12px/1.2 monospace;border-radius:6px;z-index:99999;pointer-events:none';
-  document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(badge); });
-})();
 </script>
 """
 
@@ -432,34 +423,6 @@ async def img_by_id(request: Request, img_id: int, thumb: int = 0):
     if request.headers.get('if-none-match') == etag:
         return Response(status_code=304, headers=headers)
     return Response(content=data, media_type=mime, headers=headers)
-
-# === DEBUG: estado rápido de la base de datos (ELIMINAR luego) ===
-@app.get('/_diag')
-async def _diag():
-    async with app.state.pool.acquire() as conn:
-        total = await conn.fetchval('SELECT COUNT(*) FROM muebles')
-        sold = await conn.fetchval('SELECT COUNT(*) FROM muebles WHERE vendido=TRUE')
-        unsold = await conn.fetchval('SELECT COUNT(*) FROM muebles WHERE vendido=FALSE')
-        by_store = await conn.fetch(
-            'SELECT COALESCE(tienda, \'\') AS tienda, vendido, COUNT(*) AS c '
-            'FROM muebles GROUP BY tienda, vendido ORDER BY tienda, vendido'
-        )
-        sample = await conn.fetch(
-            'SELECT id, nombre, vendido FROM muebles ORDER BY id DESC LIMIT 12'
-        )
-        whoami = {
-            'host': os.getenv("POSTGRES_HOST"),
-            'db': os.getenv("POSTGRES_DB"),
-            'user': os.getenv("POSTGRES_USER"),
-            'port': os.getenv("POSTGRES_PORT"),
-        }
-    return {
-        'whoami': whoami,
-        'total': total, 'unsold': unsold, 'sold': sold,
-        'by_store': [dict(r) for r in by_store],
-        'sample_last12': [dict(r) for r in sample],
-    }
-
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
@@ -1205,50 +1168,6 @@ async def index(request: Request):
             for comp in (filtro_nombre, filtro_tienda, filtro_tipo, orden):
                 comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
-
-# ---------- Ruta PWA mínima para probar standalone ----------
-# ---------- Ruta PWA mínima / launcher para iOS y Android ----------
-@app.get('/pwa-min', include_in_schema=False)
-def pwa_min():
-    html_doc = """<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>PWA minimal</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <link rel="manifest" href="/manifest.webmanifest?v=20250906">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#023e8a">
-  <style>
-    html,body{height:100%;margin:0;background:#0e2a44;color:#fff;
-      display:flex;align-items:center;justify-content:center;font:700 40px/1.2 system-ui}
-    .hint{position:fixed;bottom:10px;left:10px;font:12px/1 monospace;background:#111;color:#0f0;
-      padding:6px 8px;border-radius:6px;z-index:2147483647}
-  </style>
-</head>
-<body>
-  PWA minimal
-  <div id="badge" class="hint">standalone: …</div>
-  <script>
-    (function () {
-      var isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
-
-      // badge de depuración
-      var el = document.getElementById('badge');
-      if (el) el.textContent = 'standalone: ' + isStandalone;
-
-      // Si ya está instalada/abierta como app, lanzar la app real (sin dejar historial)
-      if (isStandalone) {
-        setTimeout(function(){ location.replace('/?a2hs=1'); }, 250);
-      }
-    })();
-  </script>
-</body>
-</html>"""
-    return Response(html_doc, media_type='text/html; charset=utf-8')
-
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
