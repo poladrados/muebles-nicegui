@@ -6,7 +6,7 @@ from fastapi import Response, Request, status
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse, RedirectResponse
 import asyncpg
-import os, base64, urllib.parse, hashlib, hmac, asyncio, html, math
+import os, base64, urllib.parse, urllib.request, hashlib, hmac, asyncio, html, math
 from functools import partial
 from dotenv import load_dotenv
 import pandas as pd
@@ -643,6 +643,32 @@ DB_DSN = (
     f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}?sslmode=require"
 )
 
+# ---------- Cloudflare R2 (storage de imágenes) ----------
+import boto3
+from botocore.config import Config
+
+R2_ACCESS_KEY_ID     = os.getenv('R2_ACCESS_KEY_ID')
+R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY')
+R2_BUCKET_NAME       = os.getenv('R2_BUCKET_NAME')
+R2_ENDPOINT_URL      = os.getenv('R2_ENDPOINT_URL')
+R2_PUBLIC_URL        = (os.getenv('R2_PUBLIC_URL') or '').rstrip('/')
+R2_ENABLED = all([R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME,
+                  R2_ENDPOINT_URL, R2_PUBLIC_URL])
+
+_r2_client_cache = None
+def _r2_client():
+    global _r2_client_cache
+    if _r2_client_cache is None:
+        _r2_client_cache = boto3.client(
+            's3',
+            endpoint_url=R2_ENDPOINT_URL,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            config=Config(signature_version='s3v4'),
+            region_name='auto',
+        )
+    return _r2_client_cache
+
 @app.on_startup
 async def startup():
     app.state.pool = await asyncpg.create_pool(dsn=DB_DSN, min_size=1, max_size=5)
@@ -809,7 +835,7 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
     try:
         async with app.state.pool.acquire() as conn:
             row = await conn.fetchrow("""
-                SELECT imagen_base64 FROM imagenes_muebles
+                SELECT imagen_base64, imagen_url FROM imagenes_muebles
                 WHERE mueble_id=$1
                 ORDER BY es_principal DESC, id ASC
                 OFFSET $2 LIMIT 1
@@ -818,6 +844,9 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
         if not row:
             print(f"[img] 404 mid={mueble_id} i={i}")
             return Response(status_code=404)
+
+        if row['imagen_url']:
+            return RedirectResponse(row['imagen_url'], status_code=302)
 
         data = base64.b64decode(row['imagen_base64'])
 
@@ -842,9 +871,14 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
 @app.get('/img_by_id/{img_id}')
 async def img_by_id(request: Request, img_id: int, thumb: int = 0):
     async with app.state.pool.acquire() as conn:
-        row = await conn.fetchrow('SELECT imagen_base64 FROM imagenes_muebles WHERE id=$1', img_id)
+        row = await conn.fetchrow(
+            'SELECT imagen_base64, imagen_url FROM imagenes_muebles WHERE id=$1', img_id
+        )
     if not row:
         return Response(status_code=404)
+
+    if row['imagen_url']:
+        return RedirectResponse(row['imagen_url'], status_code=302)
 
     data = base64.b64decode(row['imagen_base64'])
     if thumb == 1:
@@ -871,11 +905,22 @@ def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
     im.save(buf, format='JPEG', quality=quality, optimize=True, progressive=True)
     return buf.getvalue()
 
+def _jpeg_from_bytes(raw: bytes, max_w: int = 1200, quality: int = 86) -> bytes:
+    im = Image.open(BytesIO(raw))
+    im = im.convert('RGB')
+    w, h = im.size
+    if w > max_w:
+        new_h = int(h * (max_w / w))
+        im = im.resize((max_w, new_h), Image.LANCZOS)
+    buf = BytesIO()
+    im.save(buf, format='JPEG', quality=quality, optimize=True, progressive=True)
+    return buf.getvalue()
+
 @app.get('/og_img/{mueble_id}.jpg')
 async def og_img(request: Request, mueble_id: int):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow("""
-            SELECT imagen_base64 FROM imagenes_muebles
+            SELECT imagen_base64, imagen_url FROM imagenes_muebles
             WHERE mueble_id=$1
             ORDER BY es_principal DESC, id ASC
             LIMIT 1
@@ -883,8 +928,18 @@ async def og_img(request: Request, mueble_id: int):
     if not row:
         return Response(status_code=404)
     try:
-        jpeg = _jpeg_from_b64(row['imagen_base64'])
-    except Exception:
+        if row['imagen_url']:
+            req = urllib.request.Request(
+                row['imagen_url'],
+                headers={'User-Agent': 'inventario-el-jueves/1.0'},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                src = r.read()
+            jpeg = _jpeg_from_bytes(src)
+        else:
+            jpeg = _jpeg_from_b64(row['imagen_base64'])
+    except Exception as e:
+        print(f"[og_img] ERROR mid={mueble_id}: {type(e).__name__}: {e}")
         return Response(status_code=500)
     headers = {'Cache-Control': 'public, max-age=2592000', 'Content-Type': 'image/jpeg'}
     return Response(content=jpeg, media_type='image/jpeg', headers=headers)
