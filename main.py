@@ -570,6 +570,32 @@ if (window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
 
+function copiarEnlace(btn, url) {
+  var copy = function() {
+    var orig = btn.innerHTML;
+    btn.innerHTML = '<span>✓ Copiado</span>';
+    btn.style.background = 'var(--ink)';
+    btn.style.color = 'var(--paper)';
+    btn.style.borderColor = 'var(--ink)';
+    setTimeout(function() {
+      btn.innerHTML = orig;
+      btn.style.background = '';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(copy);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    copy();
+  }
+}
+
 /* ¡Importante!: SIN registro de Service Worker aquí para evitar bucles de recarga */
 
 var _paq = window._paq = window._paq || [];
@@ -1347,22 +1373,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
                         copy_url = html.escape(f"{origin}/o/{mid}")
                         wa_url = f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}"
-                        copy_onclick = (
-                            "(function(btn,url){"
-                            "function _fb(b){"
-                            "var orig=b.innerHTML;"
-                            "b.innerHTML='<span>✓ Copiado</span>';"
-                            "b.style.background='var(--ink)';b.style.color='var(--paper)';b.style.borderColor='var(--ink)';"
-                            "setTimeout(function(){b.innerHTML=orig;b.style.background='';b.style.color='';b.style.borderColor='';},2000);}"
-                            "if(navigator.clipboard&&window.isSecureContext){"
-                            "navigator.clipboard.writeText(url).then(function(){_fb(btn);});"
-                            "}else{"
-                            "var ta=document.createElement('textarea');"
-                            "ta.value=url;ta.style.position='fixed';ta.style.opacity='0';"
-                            "document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);"
-                            "_fb(btn);}"
-                            f"}})(this,'{copy_url}');"
-                        )
+                        copy_onclick = f"copiarEnlace(this,'{copy_url}')"
                         with ui.element('div').classes('mueble-actions'):
                             ui.html(
                                 f'<a class="btn-whatsapp" href="{html.escape(wa_url)}" '
