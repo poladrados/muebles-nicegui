@@ -956,7 +956,8 @@ async def query_tipos():
     return ['Todos'] + sorted(set(existentes + TIPOS))
 
 async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
-                        nombre_like:str|None, orden:str, limit:int|None=None, offset:int|None=None):
+                        nombre_like:str|None, orden:str, limit:int|None=None, offset:int|None=None,
+                        precio_min:float|None=None, precio_max:float|None=None):
     where, params = [], []
     if vendidos is not None:
         where.append(f'vendido = ${len(params)+1}'); params.append(vendidos)
@@ -966,6 +967,10 @@ async def query_muebles(vendidos:bool|None, tienda:str|None, tipo:str|None,
         where.append(f'tipo = ${len(params)+1}'); params.append(tipo)
     if nombre_like:
         where.append(f'LOWER(nombre) LIKE ${len(params)+1}'); params.append(f'%{nombre_like.lower()}%')
+    if precio_min is not None:
+        where.append(f'precio >= ${len(params)+1}'); params.append(precio_min)
+    if precio_max is not None:
+        where.append(f'precio <= ${len(params)+1}'); params.append(precio_max)
     order_sql = {'Más reciente':'id DESC','Más antiguo':'id ASC','Precio ↑':'precio ASC NULLS LAST','Precio ↓':'precio DESC NULLS LAST'}.get(orden,'id DESC')
     where_sql = ' AND '.join(where) if where else 'TRUE'
     sql = f"SELECT * FROM muebles WHERE {where_sql} ORDER BY {order_sql}"
@@ -1283,8 +1288,10 @@ def _kv_desc(value: str):
 
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
                          orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
-                         base_origin: str | None = None):
-    rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset)
+                         base_origin: str | None = None,
+                         precio_min:float|None=None, precio_max:float|None=None):
+    rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset,
+                               precio_min=precio_min, precio_max=precio_max)
     if only_id is not None:
         rows = [r for r in rows if int(r['id']) == int(only_id)]
     if not rows:
@@ -1542,6 +1549,8 @@ async def index(request: Request):
                     filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda').style('min-width:180px;')
                     filtro_tipo = ui.select(['Todos'], value='Todos', label='Filtrar por tipo').style('min-width:180px;')
                     orden = ui.select(['Más reciente','Más antiguo','Precio ↑','Precio ↓'], value='Más reciente', label='Ordenar por').style('min-width:180px;')
+                    filtro_precio_min = ui.number(label='Precio mín (€)', min=0, format='%.2f').props('clearable').style('min-width:140px;')
+                    filtro_precio_max = ui.number(label='Precio máx (€)', min=0, format='%.2f').props('clearable').style('min-width:140px;')
 
             # --- cargar opciones de tipo sin timer y forzar update ---
             try:
@@ -1558,16 +1567,22 @@ async def index(request: Request):
                 app.storage.user['off_unsold'] = 0
                 app.storage.user['off_sold'] = 0
 
+            def _f(v):
+                return float(v) if v not in (None, '') else None
+
             async def cargar_tanda(vendidos_flag: bool, container: ui.element, off_key: str):
                 offset = int(app.storage.user.get(off_key, 0))
+                pmin, pmax = _f(filtro_precio_min.value), _f(filtro_precio_max.value)
                 rows = await query_muebles(vendidos=vendidos_flag, tienda=filtro_tienda.value,
                                            tipo=filtro_tipo.value, nombre_like=filtro_nombre.value,
-                                           orden=orden.value, limit=PAGE_SIZE+1, offset=offset)
+                                           orden=orden.value, limit=PAGE_SIZE+1, offset=offset,
+                                           precio_min=pmin, precio_max=pmax)
                 has_more = len(rows) > PAGE_SIZE
                 with container:
                     await pintar_listado(vendidos=vendidos_flag, nombre_like=filtro_nombre.value,
                                          tienda=filtro_tienda.value, tipo=filtro_tipo.value, orden=orden.value,
-                                         limit=PAGE_SIZE, offset=offset, base_origin=base_origin)
+                                         limit=PAGE_SIZE, offset=offset, base_origin=base_origin,
+                                         precio_min=pmin, precio_max=pmax)
                 app.storage.user[off_key] = offset + PAGE_SIZE
                 return has_more
 
@@ -1604,8 +1619,12 @@ async def index(request: Request):
                                     asyncio.create_task(go())
                                 with row_more_s: ui.button('Cargar más', on_click=more_sold)
 
-            for comp in (filtro_nombre, filtro_tienda, filtro_tipo, orden):
-                comp.on_value_change(lambda e: asyncio.create_task(refrescar()))
+            filtro_nombre.on('blur', lambda e: asyncio.create_task(refrescar()))
+            filtro_tienda.on('blur', lambda e: asyncio.create_task(refrescar()))
+            filtro_tipo.on('blur', lambda e: asyncio.create_task(refrescar()))
+            orden.on('blur', lambda e: asyncio.create_task(refrescar()))
+            filtro_precio_min.on('blur', lambda e: asyncio.create_task(refrescar()))
+            filtro_precio_max.on('blur', lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
 
 # ---------- Run ----------
