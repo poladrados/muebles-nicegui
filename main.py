@@ -516,6 +516,31 @@ HEAD_HTML = """
     .card-thumb { height:auto !important; aspect-ratio: 4 / 3; }
   }
 
+  /* ============================================================
+     Skeleton shimmer para imágenes mientras cargan
+     ============================================================ */
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  .card-thumb,
+  .thumb-skeleton {
+    background-color: var(--brass-soft);
+    background-image: linear-gradient(
+      90deg,
+      var(--brass-soft) 0%,
+      var(--paper-2) 50%,
+      var(--brass-soft) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  .card-thumb[data-loaded="true"],
+  .thumb-skeleton[data-loaded="true"] {
+    background: transparent;
+    animation: none;
+  }
+
   /* Compatibilidad clases antiguas (por si quedan referencias) */
   .kv{margin:0;}
   .kv .k, .kv b, .kv strong{font-weight:700 !important; margin-right:6px;}
@@ -1084,55 +1109,68 @@ def dialog_add_mueble():
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,900px)] max-h-[92vh] overflow-auto p-4'):
         ui.label('Añadir nueva antigüedad').classes('text-xl font-bold')
 
-        with ui.grid(columns=2).classes('gap-3'):
-            tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
-            tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
-            nombre = ui.input('Nombre*')
-            precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
-
-        descripcion = ui.textarea('Descripción').classes('w-full')
-
-        ui.label('Medidas (rellena solo las que correspondan)').classes('mt-2 font-medium')
-        with ui.grid(columns=3).classes('gap-2'):
-            alto = ui.number(label='Alto (cm)', min=0)
-            largo = ui.number(label='Largo (cm)', min=0)
-            fondo = ui.number(label='Fondo (cm)', min=0)
-            diametro = ui.number(label='Diámetro (cm)', min=0)
-            diametro_base = ui.number(label='Ø Base (cm)', min=0)
-            diametro_boca = ui.number(label='Ø Boca (cm)', min=0)
-            alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
-            alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
-            ancho = ui.number(label='Ancho (cm)', min=0)
-
-        ui.label('Imágenes (la primera será principal)').classes('mt-2')
-        new_bytes: list[bytes] = []
-
-        async def on_upload(e):
-            content = await _read_upload_bytes(e)
-            if not content:
-                ui.notify('No pude leer la imagen subida (vacía). Vuelve a intentarlo.', type='warning')
-                print('[upload] archivo vacío; event=',
-                      {k: type(getattr(e, k)).__name__ for k in dir(e) if not k.startswith('_')})
-                return
-            new_bytes.append(content)
-            ui.notify(f'Imagen subida ({len(new_bytes)})')
-            print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
-
-        uploader = (
-            ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
-              .props('accept="image/*" max-file-size="52428800"')
+        paso_label = ui.label('Paso 1 de 3 — Básicos').style(
+            'color:var(--brass-deep); font-family:"Inter Tight",sans-serif; '
+            'font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; '
+            'margin:6px 0 14px 0;'
         )
 
-        # ======= Guardar (con línea de debug para verificar las imágenes) =======
+        # ---------- PASO 1: Básicos ----------
+        paso1 = ui.column().classes('w-full')
+        with paso1:
+            with ui.grid(columns=2).classes('gap-3'):
+                tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
+                tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
+                nombre = ui.input('Nombre*')
+                precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
+
+        # ---------- PASO 2: Detalles ----------
+        paso2 = ui.column().classes('w-full')
+        with paso2:
+            descripcion = ui.textarea('Descripción').classes('w-full')
+            ui.label('Medidas (rellena solo las que correspondan)').classes('mt-2 font-medium')
+            with ui.grid(columns=3).classes('gap-2'):
+                alto = ui.number(label='Alto (cm)', min=0)
+                largo = ui.number(label='Largo (cm)', min=0)
+                fondo = ui.number(label='Fondo (cm)', min=0)
+                diametro = ui.number(label='Diámetro (cm)', min=0)
+                diametro_base = ui.number(label='Ø Base (cm)', min=0)
+                diametro_boca = ui.number(label='Ø Boca (cm)', min=0)
+                alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
+                alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
+                ancho = ui.number(label='Ancho (cm)', min=0)
+        paso2.set_visibility(False)
+
+        # ---------- PASO 3: Imágenes ----------
+        paso3 = ui.column().classes('w-full')
+        with paso3:
+            ui.label('Imágenes (la primera será principal)').classes('mt-2')
+            new_bytes: list[bytes] = []
+
+            async def on_upload(e):
+                content = await _read_upload_bytes(e)
+                if not content:
+                    ui.notify('No pude leer la imagen subida (vacía). Vuelve a intentarlo.', type='warning')
+                    print('[upload] archivo vacío; event=',
+                          {k: type(getattr(e, k)).__name__ for k in dir(e) if not k.startswith('_')})
+                    return
+                new_bytes.append(content)
+                ui.notify(f'Imagen subida ({len(new_bytes)})')
+                print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
+
+            uploader = (
+                ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
+                  .props('accept="image/*" max-file-size="52428800"')
+            )
+        paso3.set_visibility(False)
+
+        # ======= Guardar (lógica intacta) =======
         async def guardar(_=None):
-            # Forzar blur para sincronizar valores
             ui.run_javascript('document.activeElement && document.activeElement.blur()')
             await asyncio.sleep(0.05)
 
-            # Nombre por defecto si vacío
             nombre_val = (nombre.value or '').strip() or 'Sin nombre'
 
-            # Precio: lee value/modelValue; si no parsea, 0.0
             precio_raw = precio.value
             if precio_raw in (None, ''):
                 try:
@@ -1155,19 +1193,38 @@ def dialog_add_mueble():
                 'ancho': _none_if_empty_or_zero(ancho.value),
             }
 
-            # DEBUG: cuántos archivos e incluso tamaños de los bytes
             print(f"[upload debug] files={len(new_bytes)} "
                   f"sizes={[len(b) for b in new_bytes] if new_bytes else []}")
 
-            await add_mueble(data, new_bytes)  # aunque no haya imágenes
+            await add_mueble(data, new_bytes)
             ui.notify('¡Mueble añadido!', type='positive')
             d.close()
             ui.run_javascript('location.reload()')
-        # =======================================================================
 
-        with ui.row().classes('justify-end mt-3'):
+        # ---------- Navegación entre pasos ----------
+        estado = {'n': 0}
+        pasos = [paso1, paso2, paso3]
+        titulos = ['Paso 1 de 3 — Básicos', 'Paso 2 de 3 — Detalles', 'Paso 3 de 3 — Imágenes']
+
+        def mostrar(n: int):
+            n = max(0, min(2, n))
+            estado['n'] = n
+            for i, p in enumerate(pasos):
+                p.set_visibility(i == n)
+            paso_label.set_text(titulos[n])
+            btn_prev.set_visibility(n > 0)
+            btn_next.set_visibility(n < 2)
+            btn_save.set_visibility(n == 2)
+
+        with ui.row().classes('justify-between items-center mt-4 w-full'):
             ui.button('Cancelar', on_click=d.close).props('flat')
-            ui.button('Guardar', on_click=guardar, color='primary')
+            with ui.row().classes('gap-2'):
+                btn_prev = ui.button('Anterior', on_click=lambda: mostrar(estado['n']-1)).props('flat')
+                btn_next = ui.button('Siguiente', on_click=lambda: mostrar(estado['n']+1), color='primary')
+                btn_save = ui.button('Guardar', on_click=guardar, color='primary')
+
+        btn_prev.set_visibility(False)
+        btn_save.set_visibility(False)
 
     return d
 
@@ -1208,7 +1265,9 @@ def dialog_edit_mueble(mueble_id: int):
                         for img in imgs:
                             iid = int(img['id'])
                             with ui.column().classes('items-center'):
-                                ui.image(f'/img_by_id/{iid}?thumb=1').classes('w-[140px] h-[140px] object-cover rounded')
+                                ui.image(f'/img_by_id/{iid}?thumb=1') \
+                                    .props('onload="this.dataset.loaded=\'true\'"') \
+                                    .classes('thumb-skeleton w-[140px] h-[140px] object-cover rounded')
                                 with ui.row().classes('gap-1'):
                                     async def make_principal(_=None, _iid=iid):
                                         await set_principal_image(mueble_id, _iid)
@@ -1344,7 +1403,7 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                         dlg.open()
 
                     ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}') \
-                        .props('loading=lazy alt="Imagen principal"') \
+                        .props('loading=lazy alt="Imagen principal" onload="this.dataset.loaded=\'true\'"') \
                         .classes('card-thumb') \
                         .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
@@ -1429,7 +1488,8 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                 with ui.row().style('gap:12px; flex-wrap:wrap;'):
                     for i in range(1, total_imgs):
                         ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
-                          .props('loading=lazy alt="Miniatura"') \
+                          .props('loading=lazy alt="Miniatura" onload="this.dataset.loaded=\'true\'"') \
+                          .classes('thumb-skeleton') \
                           .style('width:120px; height:120px; object-fit:cover; border-radius:3px; cursor:zoom-in; box-shadow:0 4px 12px -6px rgba(2,31,77,.35);') \
                           .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
 
