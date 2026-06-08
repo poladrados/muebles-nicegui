@@ -10,3 +10,7 @@ venv/
 # NiceGUI/varios
 .nicegui/
 .DS_Store
+
+# Imágenes locales (se sirven desde BD o storage externo)
+*.webp
+*.jpg
