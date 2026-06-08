@@ -14,3 +14,6 @@ venv/
 # Imágenes locales (se sirven desde BD o storage externo)
 *.webp
 *.jpg
+
+# Backups de BD
+backup_*.sql
