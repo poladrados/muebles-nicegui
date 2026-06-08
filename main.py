@@ -1343,9 +1343,20 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                     ui.label('Descripción').classes('kv-label')
                                     ui.label(desc).classes('kv-value kv-value-desc')
 
-                        # ---- Acciones (WhatsApp + admin)
+                        # ---- Acciones (WhatsApp + Copiar enlace + admin)
                         share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
+                        copy_url = html.escape(f"{origin}/o/{mid}")
                         wa_url = f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}"
+                        copy_onclick = (
+                            "(function(btn,url){"
+                            "navigator.clipboard.writeText(url).then(function(){"
+                            "var orig=btn.innerHTML;"
+                            "btn.innerHTML='<span>✓ Copiado</span>';"
+                            "btn.style.background='var(--ink)';btn.style.color='var(--paper)';btn.style.borderColor='var(--ink)';"
+                            "setTimeout(function(){btn.innerHTML=orig;btn.style.background='';btn.style.color='';btn.style.borderColor='';},2000);"
+                            "});"
+                            f"}})(this,'{copy_url}');"
+                        )
                         with ui.element('div').classes('mueble-actions'):
                             ui.html(
                                 f'<a class="btn-whatsapp" href="{html.escape(wa_url)}" '
@@ -1353,6 +1364,11 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                 f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
                                 f'<path d="M19.05 4.91A10 10 0 0 0 12.04 2C6.6 2 2.17 6.43 2.17 11.87c0 1.74.46 3.45 1.34 4.95L2.1 22l5.31-1.39a9.85 9.85 0 0 0 4.63 1.18h.01c5.44 0 9.86-4.43 9.86-9.87a9.82 9.82 0 0 0-2.86-7.01zM12.05 20.13h-.01a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.15.82.84-3.07-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.53 3.68-8.2 8.21-8.2 2.19 0 4.25.86 5.81 2.41a8.17 8.17 0 0 1 2.4 5.81c0 4.53-3.68 8.2-8.16 8.24zm4.5-6.16c-.25-.13-1.46-.72-1.69-.8-.23-.08-.39-.13-.56.13-.16.25-.64.8-.78.96-.14.16-.29.18-.54.06-.25-.13-1.04-.38-1.98-1.22-.73-.65-1.23-1.46-1.37-1.71-.14-.25-.01-.39.11-.51.11-.11.25-.29.37-.43.13-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.23.25-.85.83-.85 2.03 0 1.2.87 2.36.99 2.52.13.16 1.72 2.62 4.16 3.67.58.25 1.04.4 1.39.51.59.19 1.12.16 1.55.1.47-.07 1.46-.6 1.66-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.16-.46-.29z"/>'
                                 f'</svg><span>Compartir por WhatsApp</span></a>'
+                                f'<button class="btn-whatsapp" aria-label="Copiar enlace" onclick="{html.escape(copy_onclick)}">'
+                                f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;flex:0 0 auto">'
+                                f'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+                                f'<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+                                f'</svg><span>Copiar enlace</span></button>'
                             )
 
                             if is_admin():
@@ -1467,8 +1483,13 @@ async def index(request: Request):
                     ui.label(f"💰 Vendidos: {vendidos}")
 
                     async def export_csv(_=None):
-                        async with app.state.pool.acquire() as conn:
-                            rows = await conn.fetch('SELECT * FROM muebles ORDER BY id')
+                        rows = await query_muebles(
+                            vendidos=None,
+                            tienda=filtro_tienda.value,
+                            tipo=filtro_tipo.value,
+                            nombre_like=filtro_nombre.value,
+                            orden=orden.value,
+                        )
                         if not rows:
                             ui.notify('No hay datos', type='warning'); return
                         df = pd.DataFrame([dict(r) for r in rows])
