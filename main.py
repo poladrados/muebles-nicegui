@@ -669,6 +669,23 @@ def _r2_client():
         )
     return _r2_client_cache
 
+def _r2_put(key: str, data: bytes, mime: str = 'image/webp'):
+    _r2_client().put_object(
+        Bucket=R2_BUCKET_NAME, Key=key, Body=data, ContentType=mime,
+        CacheControl='public, max-age=31536000, immutable',
+    )
+
+def _r2_delete(key: str):
+    try:
+        _r2_client().delete_object(Bucket=R2_BUCKET_NAME, Key=key)
+    except Exception as e:
+        print(f"[r2] delete fallo key={key}: {e}")
+
+def _r2_key_from_url(url: str | None) -> str | None:
+    if not url or not R2_PUBLIC_URL or not url.startswith(R2_PUBLIC_URL):
+        return None
+    return url[len(R2_PUBLIC_URL):].lstrip('/')
+
 @app.on_startup
 async def startup():
     app.state.pool = await asyncpg.create_pool(dsn=DB_DSN, min_size=1, max_size=5)
@@ -1103,10 +1120,28 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
             for i, b in enumerate(images_bytes):
                 try:
                     b_webp = to_img_bytes(b)
-                    b64 = base64.b64encode(b_webp).decode('utf-8')
+                    if not R2_ENABLED:
+                        b64 = base64.b64encode(b_webp).decode('utf-8')
+                        await conn.execute(
+                            'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
+                            mid, b64, (i == 0)
+                        )
+                        continue
+                    img_id = await conn.fetchval(
+                        'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) '
+                        'VALUES ($1, NULL, $2) RETURNING id',
+                        mid, (i == 0)
+                    )
+                    key = f'{mid}_{img_id}.webp'
+                    try:
+                        _r2_put(key, b_webp, 'image/webp')
+                    except Exception as r2err:
+                        await conn.execute('DELETE FROM imagenes_muebles WHERE id=$1', img_id)
+                        print(f"Error subiendo imagen {i} a R2: {r2err} — fila {img_id} eliminada")
+                        continue
+                    url = f'{R2_PUBLIC_URL}/{key}'
                     await conn.execute(
-                        'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
-                        mid, b64, (i == 0)
+                        'UPDATE imagenes_muebles SET imagen_url=$1 WHERE id=$2', url, img_id
                     )
                 except Exception as e:
                     print(f"Error procesando imagen {i}: {str(e)}")
@@ -1134,22 +1169,55 @@ async def set_vendido(mueble_id: int, vendido: bool):
 
 async def delete_mueble(mueble_id: int):
     async with app.state.pool.acquire() as conn:
+        urls = await conn.fetch(
+            'SELECT imagen_url FROM imagenes_muebles '
+            'WHERE mueble_id=$1 AND imagen_url IS NOT NULL',
+            mueble_id
+        )
         async with conn.transaction():
             await conn.execute('DELETE FROM imagenes_muebles WHERE mueble_id=$1', mueble_id)
             await conn.execute('DELETE FROM muebles WHERE id=$1', mueble_id)
+    for r in urls:
+        key = _r2_key_from_url(r['imagen_url'])
+        if key:
+            _r2_delete(key)
 
 async def add_image(mueble_id: int, content_bytes: bytes, will_be_principal: bool = False):
     b_webp = to_img_bytes(content_bytes)
-    b64 = base64.b64encode(b_webp).decode('utf-8')
     async with app.state.pool.acquire() as conn:
+        if not R2_ENABLED:
+            b64 = base64.b64encode(b_webp).decode('utf-8')
+            await conn.execute(
+                'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
+                mueble_id, b64, will_be_principal
+            )
+            return
+        img_id = await conn.fetchval(
+            'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) '
+            'VALUES ($1, NULL, $2) RETURNING id',
+            mueble_id, will_be_principal
+        )
+        key = f'{mueble_id}_{img_id}.webp'
+        try:
+            _r2_put(key, b_webp, 'image/webp')
+        except Exception as e:
+            await conn.execute('DELETE FROM imagenes_muebles WHERE id=$1', img_id)
+            print(f"[add_image] R2 upload fallo, fila {img_id} borrada: {e}")
+            raise
+        url = f'{R2_PUBLIC_URL}/{key}'
         await conn.execute(
-            'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
-            mueble_id, b64, will_be_principal
+            'UPDATE imagenes_muebles SET imagen_url=$1 WHERE id=$2', url, img_id
         )
 
 async def delete_image(img_id: int):
     async with app.state.pool.acquire() as conn:
+        url = await conn.fetchval(
+            'SELECT imagen_url FROM imagenes_muebles WHERE id=$1', img_id
+        )
         await conn.execute('DELETE FROM imagenes_muebles WHERE id=$1', img_id)
+    key = _r2_key_from_url(url)
+    if key:
+        _r2_delete(key)
 
 async def set_principal_image(mueble_id: int, img_id: int):
     async with app.state.pool.acquire() as conn:
