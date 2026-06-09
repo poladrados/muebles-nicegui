@@ -1,7 +1,7 @@
 {
   "name": "Inventario El Jueves",
   "short_name": "El Jueves",
-  "start_url": "/pwa-min",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#E6F0F8",
