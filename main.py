@@ -1311,10 +1311,13 @@ def dialog_add_mueble():
                 ui.notify(f'Imagen subida ({len(new_bytes)})')
                 print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
 
-            uploader = (
-                ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
-                  .props('accept="image/*" capture="environment" max-file-size="52428800"')
-            )
+            with ui.row().classes('w-full gap-4 flex-wrap'):
+                (ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
+                   .props('accept="image/*" capture="environment" max-file-size="52428800" label="📷 Hacer foto"')
+                   .classes('flex-1'))
+                (ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
+                   .props('accept="image/*" max-file-size="52428800" label="🖼 Elegir de galería"')
+                   .classes('flex-1'))
         paso3.set_visibility(False)
 
         # ======= Guardar (lógica intacta) =======
@@ -1820,7 +1823,6 @@ async def index(request: Request):
 
                     if is_admin():
                         ui.separator()
-                        ui.label('✔ Vendidos').style('margin-top:8px; font-weight:600;')
                         with list_sold:
                             has_more_sold = await cargar_tanda(True, list_sold, 'off_sold')
                             if has_more_sold:
