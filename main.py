@@ -13,11 +13,21 @@ import pandas as pd
 from datetime import datetime
 from PIL import Image, features
 from io import BytesIO
+import json
 
 load_dotenv()
 PAGE_SIZE = 30
 THUMB_VER = "4"  # cache-buster miniaturas (subido para forzar recarga)
 BASE_URL = os.getenv('BASE_URL', 'https://inventarioeljueves.app')
+
+try:
+    import google.generativeai as genai
+    _gem_key = os.getenv('GEMINI_API_KEY', '').strip()
+    if _gem_key:
+        genai.configure(api_key=_gem_key)
+    HAS_GEMINI = bool(_gem_key)
+except ImportError:
+    HAS_GEMINI = False
 
 # ---------- helpers ----------
 def _esc(s: str) -> str:
@@ -750,6 +760,43 @@ def is_admin() -> bool:
 # ---------- Utilidades ----------
 TIPOS = ["Mesa","Consola","Buffet","Biblioteca","Armario","Cómoda","Columna","Espejo","Copa","Asiento","Otro artículo"]
 
+async def analyze_image_with_gemini(image_bytes: bytes) -> dict:
+    if not HAS_GEMINI:
+        return {}
+    prompt = (
+        "Eres un experto en antigüedades y muebles. Analiza esta imagen y "
+        "devuelve SOLO un JSON válido con estos campos exactos:\n"
+        "{\n"
+        '  "nombre": "nombre descriptivo del mueble en español, máximo 60 caracteres",\n'
+        '  "tipo": "uno de estos valores exactos: Mesa, Consola, Buffet, Biblioteca, '
+        'Armario, Cómoda, Columna, Espejo, Copa, Asiento, Otro artículo",\n'
+        '  "descripcion": "descripción del estilo, época estimada, materiales y '
+        'estado aparente. Máximo 300 caracteres."\n'
+        "}\n"
+        "Solo el JSON puro, sin texto adicional, sin backticks, sin markdown."
+    )
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        img.thumbnail((1024, 1024))
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        resp = await asyncio.to_thread(model.generate_content, [prompt, img])
+        text = (resp.text or '').strip()
+        if text.startswith('```'):
+            text = text.strip('`').strip()
+            if text.lower().startswith('json'):
+                text = text[4:].strip()
+        data = json.loads(text)
+        if data.get('tipo') not in TIPOS:
+            data['tipo'] = 'Otro artículo'
+        return {
+            'nombre': str(data.get('nombre', ''))[:60],
+            'tipo': data.get('tipo', 'Otro artículo'),
+            'descripcion': str(data.get('descripcion', ''))[:300],
+        }
+    except Exception as e:
+        print(f'[gemini] error: {e}')
+        return {}
+
 def mostrar_medidas_extendido(m):
     etq = {'alto':"Alto",'largo':"Largo",'fondo':"Fondo",'diametro':"Diámetro",
            'diametro_base':"Ø Base",'diametro_boca':"Ø Boca",
@@ -1279,43 +1326,18 @@ def dialog_add_mueble(on_saved=None):
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,900px)] max-h-[92vh] overflow-auto p-4'):
         ui.label('Añadir nueva antigüedad').classes('text-xl font-bold')
 
-        paso_label = ui.label('Paso 1 de 3 — Básicos').style(
+        paso_label = ui.label('Paso 1 de 3 — Foto').style(
             'color:var(--brass-deep); font-family:"Inter Tight",sans-serif; '
             'font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; '
             'margin:6px 0 14px 0;'
         )
 
-        # ---------- PASO 1: Básicos ----------
+        new_bytes: list[bytes] = []
+
+        # ---------- PASO 1: Foto + IA ----------
         paso1 = ui.column().classes('w-full')
         with paso1:
-            with ui.grid(columns=2).classes('gap-3'):
-                tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
-                tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
-                nombre = ui.input('Nombre*')
-                precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
-
-        # ---------- PASO 2: Detalles ----------
-        paso2 = ui.column().classes('w-full')
-        with paso2:
-            descripcion = ui.textarea('Descripción').classes('w-full')
-            ui.label('Medidas (rellena solo las que correspondan)').classes('mt-2 font-medium')
-            with ui.grid(columns=3).classes('gap-2'):
-                alto = ui.number(label='Alto (cm)', min=0)
-                largo = ui.number(label='Largo (cm)', min=0)
-                fondo = ui.number(label='Fondo (cm)', min=0)
-                diametro = ui.number(label='Diámetro (cm)', min=0)
-                diametro_base = ui.number(label='Ø Base (cm)', min=0)
-                diametro_boca = ui.number(label='Ø Boca (cm)', min=0)
-                alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
-                alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
-                ancho = ui.number(label='Ancho (cm)', min=0)
-        paso2.set_visibility(False)
-
-        # ---------- PASO 3: Imágenes ----------
-        paso3 = ui.column().classes('w-full')
-        with paso3:
-            ui.label('Imágenes (la primera será principal)').classes('mt-2')
-            new_bytes: list[bytes] = []
+            ui.label('Sube una o varias imágenes. La primera será la principal.').classes('mb-2')
 
             async def on_upload(e):
                 content = await _read_upload_bytes(e)
@@ -1327,6 +1349,8 @@ def dialog_add_mueble(on_saved=None):
                 new_bytes.append(content)
                 ui.notify(f'Imagen subida ({len(new_bytes)})')
                 print(f'[upload] recibidos {len(content)} bytes; total acumuladas={len(new_bytes)}')
+                if HAS_GEMINI:
+                    btn_ai.set_visibility(True)
 
             with ui.row().classes('w-full gap-4 flex-wrap'):
                 (ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
@@ -1335,7 +1359,67 @@ def dialog_add_mueble(on_saved=None):
                 (ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
                    .props('accept="image/*" max-file-size="52428800" label="🖼 Elegir de galería"')
                    .classes('flex-1'))
+
+            with ui.row().classes('items-center gap-3 mt-3'):
+                btn_ai = ui.button('✨ Analizar con IA', on_click=lambda: analizar()).props('color=primary')
+                spinner_ai = ui.spinner(size='lg')
+            btn_ai.set_visibility(False)
+            spinner_ai.set_visibility(False)
+            if not HAS_GEMINI:
+                ui.label('(IA no disponible: configurar GEMINI_API_KEY)') \
+                    .classes('text-xs text-gray-500 mt-1')
+
+        # ---------- PASO 2: Datos ----------
+        paso2 = ui.column().classes('w-full')
+        with paso2:
+            with ui.grid(columns=2).classes('gap-3'):
+                nombre = ui.input('Nombre*')
+                precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
+                tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
+                tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
+            descripcion = ui.textarea('Descripción').classes('w-full mt-2')
+        paso2.set_visibility(False)
+
+        # ---------- PASO 3: Medidas ----------
+        paso3 = ui.column().classes('w-full')
+        with paso3:
+            ui.label('Medidas (todas opcionales)').classes('mt-2 font-medium')
+            with ui.grid(columns=3).classes('gap-2'):
+                alto = ui.number(label='Alto (cm)', min=0)
+                largo = ui.number(label='Largo (cm)', min=0)
+                fondo = ui.number(label='Fondo (cm)', min=0)
+                diametro = ui.number(label='Diámetro (cm)', min=0)
+                diametro_base = ui.number(label='Ø Base (cm)', min=0)
+                diametro_boca = ui.number(label='Ø Boca (cm)', min=0)
+                alto_respaldo = ui.number(label='Alto respaldo (cm)', min=0)
+                alto_asiento = ui.number(label='Alto asiento (cm)', min=0)
+                ancho = ui.number(label='Ancho (cm)', min=0)
         paso3.set_visibility(False)
+
+        # ======= Análisis con IA =======
+        async def analizar():
+            if not new_bytes:
+                ui.notify('Primero sube una imagen', type='warning')
+                return
+            btn_ai.set_visibility(False)
+            spinner_ai.set_visibility(True)
+            ui.notify('Analizando imagen…')
+            try:
+                data = await analyze_image_with_gemini(new_bytes[0])
+            finally:
+                spinner_ai.set_visibility(False)
+                btn_ai.set_visibility(True)
+            if not data:
+                ui.notify('No pude analizar la imagen', type='warning')
+                return
+            if data.get('nombre'):
+                nombre.value = data['nombre']
+            if data.get('tipo'):
+                tipo.value = data['tipo']
+            if data.get('descripcion'):
+                descripcion.value = data['descripcion']
+            ui.notify('Datos rellenados por IA', type='positive')
+            mostrar(1)
 
         # ======= Guardar (lógica intacta) =======
         async def guardar(_=None):
@@ -1380,7 +1464,7 @@ def dialog_add_mueble(on_saved=None):
         # ---------- Navegación entre pasos ----------
         estado = {'n': 0}
         pasos = [paso1, paso2, paso3]
-        titulos = ['Paso 1 de 3 — Básicos', 'Paso 2 de 3 — Detalles', 'Paso 3 de 3 — Imágenes']
+        titulos = ['Paso 1 de 3 — Foto', 'Paso 2 de 3 — Datos', 'Paso 3 de 3 — Medidas']
 
         def mostrar(n: int):
             n = max(0, min(2, n))

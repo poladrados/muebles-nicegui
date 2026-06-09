@@ -6,3 +6,4 @@ pandas
 pillow
 uvicorn
 boto3
+google-generativeai
