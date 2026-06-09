@@ -467,7 +467,6 @@ HEAD_HTML = """
   }
   @media (min-width: 641px) {
     details.filtros-panel > summary { display: none !important; }
-    details.filtros-panel > :not(summary) { display: flex !important; flex-wrap: wrap; }
   }
 
   /* ============================================================
@@ -655,6 +654,24 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   g.async=true; g.src='https://cdn.matomo.cloud/inventarioeljueves.matomo.cloud/matomo.js';
   s.parentNode.insertBefore(g,s);
 })();
+
+function syncFiltrosOpen() {
+  var el = document.querySelector('details.filtros-panel');
+  if (!el) return;
+  if (window.matchMedia('(max-width: 640px)').matches) {
+    el.removeAttribute('open');
+  } else {
+    el.setAttribute('open', '');
+  }
+}
+addEventListener('DOMContentLoaded', function() {
+  syncFiltrosOpen();
+  setTimeout(syncFiltrosOpen, 200);
+  setTimeout(syncFiltrosOpen, 800);
+});
+addEventListener('resize', function() {
+  requestAnimationFrame(syncFiltrosOpen);
+});
 </script>
 """.replace('__MATOMO_URL__', os.getenv('MATOMO_URL', 'https://inventarioeljueves.matomo.cloud/'))
 
@@ -884,7 +901,7 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
             return Response(status_code=404)
 
         if row['imagen_url']:
-            return RedirectResponse(row['imagen_url'], status_code=302)
+            return RedirectResponse(row['imagen_url'], status_code=307)
 
         data = base64.b64decode(row['imagen_base64'])
 
@@ -916,7 +933,7 @@ async def img_by_id(request: Request, img_id: int, thumb: int = 0):
         return Response(status_code=404)
 
     if row['imagen_url']:
-        return RedirectResponse(row['imagen_url'], status_code=302)
+        return RedirectResponse(row['imagen_url'], status_code=307)
 
     data = base64.b64decode(row['imagen_base64'])
     if thumb == 1:
@@ -1258,7 +1275,7 @@ async def set_principal_image(mueble_id: int, img_id: int):
 
 # ---------- Diálogos admin (completos, traídos del código antiguo) ----------
 
-def dialog_add_mueble():
+def dialog_add_mueble(on_saved=None):
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,900px)] max-h-[92vh] overflow-auto p-4'):
         ui.label('Añadir nueva antigüedad').classes('text-xl font-bold')
 
@@ -1355,7 +1372,10 @@ def dialog_add_mueble():
             await add_mueble(data, new_bytes)
             ui.notify('¡Mueble añadido!', type='positive')
             d.close()
-            ui.run_javascript('location.reload()')
+            if on_saved:
+                await on_saved()
+            else:
+                ui.run_javascript('location.reload()')
 
         # ---------- Navegación entre pasos ----------
         estado = {'n': 0}
@@ -1385,7 +1405,7 @@ def dialog_add_mueble():
     return d
 
 
-def dialog_edit_mueble(mueble_id: int):
+def dialog_edit_mueble(mueble_id: int, on_saved=None):
     with ui.dialog() as d, ui.card().classes('w-[min(92vw,1000px)] max-h-[92vh] overflow-auto p-4'):
         ui.label('Editar mueble').classes('text-xl font-bold')
         cont = ui.column().classes('gap-3')
@@ -1412,12 +1432,19 @@ def dialog_edit_mueble(mueble_id: int):
                     ancho = ui.number(label='Ancho (cm)', value=mueble.get('ancho') or 0)
 
                 # Imágenes existentes
-                imgs = await app.state.pool.fetch(
-                    'SELECT id, es_principal FROM imagenes_muebles WHERE mueble_id=$1 ORDER BY es_principal DESC, id ASC',
-                    mueble_id
-                )
-                with ui.expansion(f'Imágenes ({len(imgs)})', value=True):
-                    with ui.row().classes('gap-3 flex-wrap'):
+                imgs: list = []
+                with ui.expansion('Imágenes', value=True) as img_expansion:
+                    img_grid = ui.row().classes('gap-3 flex-wrap')
+
+                async def reload_imgs():
+                    nonlocal imgs
+                    imgs = await app.state.pool.fetch(
+                        'SELECT id, es_principal FROM imagenes_muebles WHERE mueble_id=$1 ORDER BY es_principal DESC, id ASC',
+                        mueble_id
+                    )
+                    img_expansion.text = f'Imágenes ({len(imgs)})'
+                    img_grid.clear()
+                    with img_grid:
                         for img in imgs:
                             iid = int(img['id'])
                             with ui.column().classes('items-center'):
@@ -1428,7 +1455,7 @@ def dialog_edit_mueble(mueble_id: int):
                                     async def make_principal(_=None, _iid=iid):
                                         await set_principal_image(mueble_id, _iid)
                                         ui.notify('Principal actualizada', type='positive')
-                                        ui.run_javascript('location.reload()')
+                                        await reload_imgs()
                                     ui.button('⭐ Principal', on_click=make_principal).props('flat')
                                     def ask_delete(_=None, _iid=iid):
                                         with ui.dialog() as dd:
@@ -1437,10 +1464,14 @@ def dialog_edit_mueble(mueble_id: int):
                                                 with ui.row().classes('justify-end'):
                                                     ui.button('Cancelar', on_click=dd.close).props('flat')
                                                     async def do_del(_=None):
-                                                        await delete_image(_iid); dd.close(); ui.run_javascript('location.reload()')
+                                                        await delete_image(_iid)
+                                                        dd.close()
+                                                        await reload_imgs()
                                                     ui.button('Eliminar', color='negative', on_click=do_del)
                                         dd.open()
                                     ui.button('🗑 Eliminar', color='negative', on_click=ask_delete).props('flat')
+
+                await reload_imgs()
 
                 # Añadir nuevas
                 ui.label('Añadir nuevas imágenes').classes('mt-2')
@@ -1470,7 +1501,12 @@ def dialog_edit_mueble(mueble_id: int):
                             first_principal = (len(imgs) == 0)
                             for i, raw in enumerate(new_bytes):
                                 await add_image(mueble_id, raw, will_be_principal=(first_principal and i == 0))
-                        ui.notify('¡Cambios guardados!', type='positive'); d.close(); ui.run_javascript('location.reload()')
+                        ui.notify('¡Cambios guardados!', type='positive')
+                        d.close()
+                        if on_saved:
+                            await on_saved()
+                        else:
+                            ui.run_javascript('location.reload()')
                     ui.button('Guardar', on_click=guardar, color='primary')
         ui.timer(0.05, cargar_datos, once=True)
     return d
@@ -1504,7 +1540,8 @@ def _kv_desc(value: str):
 async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo='Todos',
                          orden='Más reciente', only_id:int|None=None, limit:int|None=None, offset:int|None=None,
                          base_origin: str | None = None,
-                         precio_min:float|None=None, precio_max:float|None=None):
+                         precio_min:float|None=None, precio_max:float|None=None,
+                         on_change=None):
     rows = await query_muebles(vendidos, tienda, tipo, nombre_like, orden, limit, offset,
                                precio_min=precio_min, precio_max=precio_max)
     if only_id is not None:
@@ -1518,136 +1555,140 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
         m = dict(m)  # ← importante para poder usar .get()
         mid = int(m['id'])
 
-        with ui.card().classes('mueble-card'):
-            # ---- Cabecera: título + precio + badge nuevo
-            with ui.element('div').classes('mueble-head'):
-                with ui.element('div').style('flex:1 1 auto; min-width:0;'):
-                    nombre_html = html.escape(str(m['nombre']))
-                    nuevo_html = '<span class="mueble-badge-nuevo">Nuevo</span>' if es_nuevo(m.get('fecha')) else ''
-                    ui.html(f'<div class="mueble-title">{nombre_html}{nuevo_html}</div>')
-                ui.html(f'<div class="mueble-price">{html.escape(_fmt_precio(m.get("precio")))}</div>')
+        card_container = ui.element('div')
+        with card_container:
+            with ui.card().classes('mueble-card'):
+                # ---- Cabecera: título + precio + badge nuevo
+                with ui.element('div').classes('mueble-head'):
+                    with ui.element('div').style('flex:1 1 auto; min-width:0;'):
+                        nombre_html = html.escape(str(m['nombre']))
+                        nuevo_html = '<span class="mueble-badge-nuevo">Nuevo</span>' if es_nuevo(m.get('fecha')) else ''
+                        ui.html(f'<div class="mueble-title">{nombre_html}{nuevo_html}</div>')
+                    ui.html(f'<div class="mueble-price">{html.escape(_fmt_precio(m.get("precio")))}</div>')
 
-            with ui.element('div').classes('card-flex'):
-                # ---- imagen principal + diálogo
-                with ui.element('div').classes('card-main'):
-                    with ui.dialog() as dialog:
-                        # MISMO comportamiento a pantalla completa, pero ahora el contenedor es relativo
-                        with ui.column().style(
-                            'align-items:center; justify-content:center; '
-                            'width:100vw; height:100vh; position:relative;'
-                        ):
-                            big = ui.image(f'/img/{mid}?i=0').style(
-                                'max-width:90vw; max-height:90vh; object-fit:contain; '
-                                'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
-                            )
+                with ui.element('div').classes('card-flex'):
+                    # ---- imagen principal + diálogo
+                    with ui.element('div').classes('card-main'):
+                        with ui.dialog() as dialog:
+                            # MISMO comportamiento a pantalla completa, pero ahora el contenedor es relativo
+                            with ui.column().style(
+                                'align-items:center; justify-content:center; '
+                                'width:100vw; height:100vh; position:relative;'
+                            ):
+                                big = ui.image(f'/img/{mid}?i=0').style(
+                                    'max-width:90vw; max-height:90vh; object-fit:contain; '
+                                    'border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.2);'
+                                )
 
-                            # Botón de cierre: absoluto dentro del contenedor, notch-safe y con z-index alto
-                            ui.button('✕', on_click=dialog.close) \
-                              .props('flat round size=lg aria-label="Cerrar imagen"') \
-                              .classes('absolute') \
-                              .style(
-                                  'top:12px; right:12px; '
-                                  'top: calc(constant(safe-area-inset-top) + 12px); '
-                                  'top: calc(env(safe-area-inset-top) + 12px); '
-                                  'right: calc(constant(safe-area-inset-right) + 12px); '
-                                  'right: calc(env(safe-area-inset-right) + 12px); '
-                                  'z-index:2147483647; background:rgba(255,255,255,.92);'
-                              )
+                                # Botón de cierre: absoluto dentro del contenedor, notch-safe y con z-index alto
+                                ui.button('✕', on_click=dialog.close) \
+                                  .props('flat round size=lg aria-label="Cerrar imagen"') \
+                                  .classes('absolute') \
+                                  .style(
+                                      'top:12px; right:12px; '
+                                      'top: calc(constant(safe-area-inset-top) + 12px); '
+                                      'top: calc(env(safe-area-inset-top) + 12px); '
+                                      'right: calc(constant(safe-area-inset-right) + 12px); '
+                                      'right: calc(env(safe-area-inset-right) + 12px); '
+                                      'z-index:2147483647; background:rgba(255,255,255,.92);'
+                                  )
 
-                    def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
-                        big_img.set_source(f'/img/{mid_val}?i={index}')
-                        dlg.open()
+                        def open_with(index:int, big_img=big, mid_val=mid, dlg=dialog):
+                            big_img.set_source(f'/img/{mid_val}?i={index}')
+                            dlg.open()
 
-                    ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}') \
-                        .props('loading=lazy alt="Imagen principal" onload="this.dataset.loaded=\'true\'"') \
-                        .classes('card-thumb') \
-                        .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
+                        ui.image(f'/img/{mid}?i=0&thumb=1&v={THUMB_VER}') \
+                            .props('loading=lazy alt="Imagen principal" onload="this.dataset.loaded=\'true\'"') \
+                            .classes('card-thumb') \
+                            .on('click', lambda *_h, h=partial(open_with, 0, big, mid, dialog): h())
 
-                # ---- DETALLES (sin HTML raw — pares etiqueta/valor seguros)
-                try:
-                    with ui.column().classes('card-details').style('gap:0;'):
-                        def kv(label: str, value: str):
-                            with ui.element('div').classes('kv-row'):
-                                ui.label(label).classes('kv-label')
-                                ui.label(value).classes('kv-value')
-
-                        kv('Tipo', m.get('tipo') or '—')
-                        kv('Tienda', m.get('tienda') or '—')
-                        kv('Medidas', mostrar_medidas_extendido(m))
-                        if m.get('fecha'):
-                            kv('Registro', _fmt_fecha(m.get('fecha')))
-
-                        desc = (m.get('descripcion') or '').strip()
-                        if desc:
-                            if len(desc) > 220:
+                    # ---- DETALLES (sin HTML raw — pares etiqueta/valor seguros)
+                    try:
+                        with ui.column().classes('card-details').style('gap:0;'):
+                            def kv(label: str, value: str):
                                 with ui.element('div').classes('kv-row'):
-                                    ui.label('Descripción').classes('kv-label')
-                                    ui.label(desc[:220] + '…').classes('kv-value kv-value-desc')
-                                with ui.expansion('Leer descripción completa').classes('editorial-expansion'):
-                                    ui.label(desc).classes('kv-value kv-value-desc') \
-                                        .style('font-size:17px; line-height:1.55;')
-                            else:
-                                with ui.element('div').classes('kv-row'):
-                                    ui.label('Descripción').classes('kv-label')
-                                    ui.label(desc).classes('kv-value kv-value-desc')
+                                    ui.label(label).classes('kv-label')
+                                    ui.label(value).classes('kv-value')
 
-                        # ---- Acciones (WhatsApp + Copiar enlace + admin)
-                        share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
-                        copy_url = html.escape(f"{origin}/o/{mid}")
-                        wa_url = f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}"
-                        copy_onclick = f"copiarEnlace(this,'{copy_url}')"
-                        with ui.element('div').classes('mueble-actions'):
-                            ui.html(
-                                f'<a class="btn-whatsapp" href="{html.escape(wa_url)}" '
-                                f'target="_blank" rel="noopener" aria-label="Compartir por WhatsApp">'
-                                f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
-                                f'<path d="M19.05 4.91A10 10 0 0 0 12.04 2C6.6 2 2.17 6.43 2.17 11.87c0 1.74.46 3.45 1.34 4.95L2.1 22l5.31-1.39a9.85 9.85 0 0 0 4.63 1.18h.01c5.44 0 9.86-4.43 9.86-9.87a9.82 9.82 0 0 0-2.86-7.01zM12.05 20.13h-.01a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.15.82.84-3.07-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.53 3.68-8.2 8.21-8.2 2.19 0 4.25.86 5.81 2.41a8.17 8.17 0 0 1 2.4 5.81c0 4.53-3.68 8.2-8.16 8.24zm4.5-6.16c-.25-.13-1.46-.72-1.69-.8-.23-.08-.39-.13-.56.13-.16.25-.64.8-.78.96-.14.16-.29.18-.54.06-.25-.13-1.04-.38-1.98-1.22-.73-.65-1.23-1.46-1.37-1.71-.14-.25-.01-.39.11-.51.11-.11.25-.29.37-.43.13-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.23.25-.85.83-.85 2.03 0 1.2.87 2.36.99 2.52.13.16 1.72 2.62 4.16 3.67.58.25 1.04.4 1.39.51.59.19 1.12.16 1.55.1.47-.07 1.46-.6 1.66-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.16-.46-.29z"/>'
-                                f'</svg><span>Compartir por WhatsApp</span></a>'
-                                f'<button class="btn-whatsapp" aria-label="Copiar enlace" onclick="{html.escape(copy_onclick)}">'
-                                f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;flex:0 0 auto">'
-                                f'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
-                                f'<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
-                                f'</svg><span>Copiar enlace</span></button>'
-                            )
+                            kv('Tipo', m.get('tipo') or '—')
+                            kv('Tienda', m.get('tienda') or '—')
+                            kv('Medidas', mostrar_medidas_extendido(m))
+                            if m.get('fecha'):
+                                kv('Registro', _fmt_fecha(m.get('fecha')))
 
-                            if is_admin():
-                                with ui.element('div').classes('mueble-actions-admin'):
-                                    ui.button('Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid).open()) \
-                                        .classes('btn-ghost')
+                            desc = (m.get('descripcion') or '').strip()
+                            if desc:
+                                if len(desc) > 220:
+                                    with ui.element('div').classes('kv-row'):
+                                        ui.label('Descripción').classes('kv-label')
+                                        ui.label(desc[:220] + '…').classes('kv-value kv-value-desc')
+                                    with ui.expansion('Leer descripción completa').classes('editorial-expansion'):
+                                        ui.label(desc).classes('kv-value kv-value-desc') \
+                                            .style('font-size:17px; line-height:1.55;')
+                                else:
+                                    with ui.element('div').classes('kv-row'):
+                                        ui.label('Descripción').classes('kv-label')
+                                        ui.label(desc).classes('kv-value kv-value-desc')
 
-                                    def ask_delete_mueble(_=None, _mid=mid):
-                                        with ui.dialog() as dd:
-                                            with ui.card():
-                                                ui.label('¿Eliminar este mueble?')
-                                                with ui.row().classes('justify-end'):
-                                                    ui.button('Cancelar', on_click=dd.close).props('flat')
-                                                    async def do_delete(_=None):
-                                                        await delete_mueble(_mid); dd.close(); ui.run_javascript('location.reload()')
-                                                    ui.button('Eliminar', color='negative', on_click=do_delete)
-                                        dd.open()
+                            # ---- Acciones (WhatsApp + Copiar enlace + admin)
+                            share_url = f"{origin}/o/{mid}?v={int(datetime.now().timestamp())}"
+                            copy_url = html.escape(f"{origin}/o/{mid}")
+                            wa_url = f"https://wa.me/?text={urllib.parse.quote('Mira este mueble: ' + share_url)}"
+                            copy_onclick = f"copiarEnlace(this,'{copy_url}')"
+                            with ui.element('div').classes('mueble-actions'):
+                                ui.html(
+                                    f'<a class="btn-whatsapp" href="{html.escape(wa_url)}" '
+                                    f'target="_blank" rel="noopener" aria-label="Compartir por WhatsApp">'
+                                    f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+                                    f'<path d="M19.05 4.91A10 10 0 0 0 12.04 2C6.6 2 2.17 6.43 2.17 11.87c0 1.74.46 3.45 1.34 4.95L2.1 22l5.31-1.39a9.85 9.85 0 0 0 4.63 1.18h.01c5.44 0 9.86-4.43 9.86-9.87a9.82 9.82 0 0 0-2.86-7.01zM12.05 20.13h-.01a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.15.82.84-3.07-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.53 3.68-8.2 8.21-8.2 2.19 0 4.25.86 5.81 2.41a8.17 8.17 0 0 1 2.4 5.81c0 4.53-3.68 8.2-8.16 8.24zm4.5-6.16c-.25-.13-1.46-.72-1.69-.8-.23-.08-.39-.13-.56.13-.16.25-.64.8-.78.96-.14.16-.29.18-.54.06-.25-.13-1.04-.38-1.98-1.22-.73-.65-1.23-1.46-1.37-1.71-.14-.25-.01-.39.11-.51.11-.11.25-.29.37-.43.13-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.23.25-.85.83-.85 2.03 0 1.2.87 2.36.99 2.52.13.16 1.72 2.62 4.16 3.67.58.25 1.04.4 1.39.51.59.19 1.12.16 1.55.1.47-.07 1.46-.6 1.66-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.16-.46-.29z"/>'
+                                    f'</svg><span>Compartir por WhatsApp</span></a>'
+                                    f'<button class="btn-whatsapp" aria-label="Copiar enlace" onclick="{html.escape(copy_onclick)}">'
+                                    f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;flex:0 0 auto">'
+                                    f'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+                                    f'<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+                                    f'</svg><span>Copiar enlace</span></button>'
+                                )
 
-                                    ui.button('Vendido', on_click=ask_delete_mueble).classes('btn-ghost')
-                                    ui.button('Eliminar', on_click=ask_delete_mueble).classes('btn-ghost btn-ghost-danger')
-                except Exception as e:
-                    print(f"[details err id={mid}]: {e}")
+                                if is_admin():
+                                    with ui.element('div').classes('mueble-actions-admin'):
+                                        ui.button('Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid, on_saved=on_change).open()) \
+                                            .classes('btn-ghost')
 
-        # ---- MÁS IMÁGENES
-        try:
-            async with app.state.pool.acquire() as conn:
-                total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
-        except Exception as e:
-            print(f"[imgcount err id={mid}]: {e}")
-            total_imgs = 0
+                                        def ask_delete_mueble(_=None, _mid=mid, _card=card_container):
+                                            with ui.dialog() as dd:
+                                                with ui.card():
+                                                    ui.label('¿Eliminar este mueble?')
+                                                    with ui.row().classes('justify-end'):
+                                                        ui.button('Cancelar', on_click=dd.close).props('flat')
+                                                        async def do_delete(_=None):
+                                                            await delete_mueble(_mid)
+                                                            dd.close()
+                                                            _card.delete()
+                                                        ui.button('Eliminar', color='negative', on_click=do_delete)
+                                            dd.open()
 
-        if total_imgs and total_imgs > 1:
-            with ui.expansion(f"Ver más imágenes ({total_imgs-1})").classes('editorial-expansion'):
-                with ui.row().style('gap:12px; flex-wrap:wrap;'):
-                    for i in range(1, total_imgs):
-                        ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
-                          .props('loading=lazy alt="Miniatura" onload="this.dataset.loaded=\'true\'"') \
-                          .classes('thumb-skeleton') \
-                          .style('width:120px; height:120px; object-fit:cover; border-radius:3px; cursor:zoom-in; box-shadow:0 4px 12px -6px rgba(2,31,77,.35);') \
-                          .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
+                                        ui.button('Vendido', on_click=ask_delete_mueble).classes('btn-ghost')
+                                        ui.button('Eliminar', on_click=ask_delete_mueble).classes('btn-ghost btn-ghost-danger')
+                    except Exception as e:
+                        print(f"[details err id={mid}]: {e}")
+
+            # ---- MÁS IMÁGENES
+            try:
+                async with app.state.pool.acquire() as conn:
+                    total_imgs = await conn.fetchval('SELECT COUNT(*) FROM imagenes_muebles WHERE mueble_id=$1', mid)
+            except Exception as e:
+                print(f"[imgcount err id={mid}]: {e}")
+                total_imgs = 0
+
+            if total_imgs and total_imgs > 1:
+                with ui.expansion(f"Ver más imágenes ({total_imgs-1})").classes('editorial-expansion'):
+                    with ui.row().style('gap:12px; flex-wrap:wrap;'):
+                        for i in range(1, total_imgs):
+                            ui.image(f'/img/{mid}?i={i}&thumb=1&v={THUMB_VER}') \
+                              .props('loading=lazy alt="Miniatura" onload="this.dataset.loaded=\'true\'"') \
+                              .classes('thumb-skeleton') \
+                              .style('width:120px; height:120px; object-fit:cover; border-radius:3px; cursor:zoom-in; box-shadow:0 4px 12px -6px rgba(2,31,77,.35);') \
+                              .on('click', lambda *_h, h=partial(open_with, i, big, mid, dialog): h())
 
 
 
@@ -1737,7 +1778,7 @@ async def index(request: Request):
                         ui.download(bytes(csv, 'utf-8'), filename='muebles.csv')
                     ui.button('⬇️ Exportar inventario CSV', on_click=export_csv).classes('q-mt-sm')
 
-                    ui.button('➕ Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()).classes('q-mt-sm')
+                    ui.button('➕ Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble(on_saved=refrescar).open()).classes('q-mt-sm')
 
             ui.timer(0.1, lambda: asyncio.create_task(cargar_stats()), once=True)
 
@@ -1756,10 +1797,10 @@ async def index(request: Request):
                     ui.label('Inventario de Antigüedades El Jueves').classes('site-header-title')
 
             if is_admin():
-                ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()) \
+                ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble(on_saved=refrescar).open()) \
                     .classes('btn-primary-editorial q-mb-md')
 
-            with ui.element('details').classes('filtros-panel'):
+            with ui.element('details').classes('filtros-panel').props('open'):
                 with ui.element('summary').classes('filtros-summary'):
                     ui.label('🔍 Filtrar el inventario')
                 with ui.row().style('gap:18px; flex-wrap:wrap;'):
@@ -1800,7 +1841,8 @@ async def index(request: Request):
                     await pintar_listado(vendidos=vendidos_flag, nombre_like=filtro_nombre.value,
                                          tienda=filtro_tienda.value, tipo=filtro_tipo.value, orden=orden.value,
                                          limit=PAGE_SIZE, offset=offset, base_origin=base_origin,
-                                         precio_min=pmin, precio_max=pmax)
+                                         precio_min=pmin, precio_max=pmax,
+                                         on_change=refrescar)
                 app.storage.user[off_key] = offset + PAGE_SIZE
                 return has_more
 
