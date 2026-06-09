@@ -4,7 +4,7 @@
 from nicegui import ui, app
 from fastapi import Response, Request, status
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse, RedirectResponse
+from starlette.responses import FileResponse, RedirectResponse, JSONResponse
 import asyncpg
 import os, base64, urllib.parse, urllib.request, hashlib, hmac, asyncio, html, math
 from functools import partial
@@ -448,6 +448,27 @@ HEAD_HTML = """
   }
   .filtros-panel .q-field--focused .q-field__control { border-bottom-color: var(--ink) !important; }
   .filtros-panel .q-field--focused .q-field__label { color: var(--ink) !important; }
+
+  @media (max-width: 640px) {
+    .filtros-panel::before { display: none; }
+    .filtros-summary {
+      display: block;
+      padding: 4px 0;
+      cursor: pointer;
+      font-family: 'Inter Tight', system-ui, sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .25em;
+      text-transform: uppercase;
+      color: var(--brass);
+      list-style: none;
+    }
+    .filtros-summary::-webkit-details-marker { display: none; }
+  }
+  @media (min-width: 641px) {
+    details.filtros-panel > summary { display: none !important; }
+    details.filtros-panel > :not(summary) { display: flex !important; flex-wrap: wrap; }
+  }
 
   /* ============================================================
      EXPANSION — "Ver más imágenes" / "Ver más"
@@ -987,6 +1008,15 @@ def _root_manifest():
         media_type='application/manifest+json; charset=utf-8'
     )
 
+@app.get('/health')
+async def health():
+    try:
+        async with app.state.pool.acquire() as conn:
+            await conn.execute('SELECT 1')
+        return JSONResponse({'status': 'ok', 'db': 'ok'})
+    except Exception:
+        return JSONResponse({'status': 'error', 'db': 'error'}, status_code=503)
+
 # === Página SSR con OG: /o/{id} ===
 @app.get('/o/{mid}')
 async def og_page(request: Request, mid: int):
@@ -1283,7 +1313,7 @@ def dialog_add_mueble():
 
             uploader = (
                 ui.upload(multiple=True, on_upload=on_upload, auto_upload=True)
-                  .props('accept="image/*" max-file-size="52428800"')
+                  .props('accept="image/*" capture="environment" max-file-size="52428800"')
             )
         paso3.set_visibility(False)
 
@@ -1726,7 +1756,9 @@ async def index(request: Request):
                 ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble().open()) \
                     .classes('btn-primary-editorial q-mb-md')
 
-            with ui.element('div').classes('filtros-panel'):
+            with ui.element('details').classes('filtros-panel'):
+                with ui.element('summary').classes('filtros-summary'):
+                    ui.label('🔍 Filtrar el inventario')
                 with ui.row().style('gap:18px; flex-wrap:wrap;'):
                     filtro_nombre = ui.input('Buscar por nombre').props('clearable').style('min-width:200px;')
                     filtro_tienda = ui.select(['Todas','El Rastro','Regueros'], value='Todas', label='Filtrar por tienda').style('min-width:180px;')
