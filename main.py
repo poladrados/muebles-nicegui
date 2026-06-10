@@ -30,6 +30,7 @@ except ImportError:
     HAS_GEMINI = False
 
 from asesor_estilo import StyleAdvisor, advisor_chat_ui
+from ios_installer import show_ios_install_banner
 
 # ---------- helpers ----------
 def _esc(s: str) -> str:
@@ -2001,6 +2002,7 @@ async def index(request: Request):
             filtro_precio_min.on('blur', lambda e: asyncio.create_task(refrescar()))
             filtro_precio_max.on('blur', lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
+            ui.timer(2.0, show_ios_install_banner, once=True)
 
 
 @ui.page('/asesor')
