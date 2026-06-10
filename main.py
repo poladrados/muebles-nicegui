@@ -29,6 +29,8 @@ try:
 except ImportError:
     HAS_GEMINI = False
 
+from asesor_estilo import StyleAdvisor, advisor_chat_ui
+
 # ---------- helpers ----------
 def _esc(s: str) -> str:
     return html.escape(s or '')
@@ -592,6 +594,30 @@ HEAD_HTML = """
     left: calc(constant(safe-area-inset-left) + 12px);
     left: calc(env(safe-area-inset-left) + 12px);
   }
+
+  /* FAB Asesor de Estilo (esquina inferior derecha, ghost + brass) */
+  .advisor-fab {
+    position: fixed !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 24px) !important;
+    right: calc(env(safe-area-inset-right, 0px) + 24px) !important;
+    z-index: 9999 !important;
+    background: var(--paper) !important;
+    color: var(--brass) !important;
+    border: 1px solid var(--brass) !important;
+    border-radius: 50px !important;
+    padding: 12px 20px !important;
+    font-family: 'Cormorant Garamond', serif !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.03em !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    text-transform: none !important;
+    transition: background-color 0.2s, color 0.2s, transform 0.15s !important;
+  }
+  .advisor-fab:hover {
+    background: var(--brass) !important;
+    color: var(--paper) !important;
+    transform: translateY(-1px);
+  }
 </style>
 <style>
   @media (max-width: 640px) {
@@ -741,6 +767,7 @@ async def startup():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_vendido_tienda ON muebles (vendido, tienda)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_tipo ON muebles (tipo)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_muebles_lower_nombre ON muebles (LOWER(nombre))")
+    app.state.advisor = StyleAdvisor(os.getenv('GEMINI_API_KEY', '').strip(), app.state.pool)
 
 @app.on_shutdown
 async def shutdown():
@@ -1880,6 +1907,11 @@ async def index(request: Request):
                     ui.html('<span class="site-header-ornament">❦</span>')
                     ui.label('Inventario de Antigüedades El Jueves').classes('site-header-title')
 
+            if not is_admin():
+                ui.button('💬 Asesor de Estilo', on_click=lambda: ui.navigate.to('/asesor')) \
+                    .props('flat no-caps') \
+                    .classes('advisor-fab')
+
             if is_admin():
                 ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble(on_saved=refrescar).open()) \
                     .classes('btn-primary-editorial q-mb-md')
@@ -1969,6 +2001,13 @@ async def index(request: Request):
             filtro_precio_min.on('blur', lambda e: asyncio.create_task(refrescar()))
             filtro_precio_max.on('blur', lambda e: asyncio.create_task(refrescar()))
             ui.timer(0.05, lambda: asyncio.create_task(refrescar()), once=True)
+
+
+@ui.page('/asesor')
+async def asesor_page():
+    ui.add_head_html(HEAD_HTML)
+    advisor_chat_ui(app.state.advisor)
+
 
 # ---------- Run ----------
 if __name__ in {"__main__", "__mp_main__"}:
