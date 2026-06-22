@@ -1,29 +1,73 @@
-Eres un ingeniero senior revisando y mejorando una aplicación Python en producción.
+Eres un ingeniero senior trabajando en una aplicación Python en producción.
 
-## Contexto del proyecto
-App de inventario de antigüedades ("Inventario El Jueves") construida con NiceGUI + FastAPI + asyncpg + PostgreSQL, desplegada en Railway. Un solo archivo `main.py` de ~900 líneas hace todo: rutas FastAPI, lógica de BD, procesamiento de imágenes, componentes UI, autenticación y PWA.
+## Qué es la app
 
-## Problemas identificados (en orden de prioridad)
+Inventario de antigüedades "El Jueves". Stack: NiceGUI + FastAPI + asyncpg +
+PostgreSQL, desplegada en Railway. Un solo archivo `main.py` concentra toda la
+lógica: rutas FastAPI, componentes NiceGUI, procesamiento de imágenes,
+autenticación y PWA. El frontend público (actualmente el mismo NiceGUI) migrará
+próximamente a Next.js en Vercel.
 
-### 🔴 CRÍTICO — Hacer primero
-1. **Endpoint `/_diag` expuesto sin autenticación** — expone host, nombre de BD, usuario y estructura a cualquiera que conozca la ruta. Eliminarlo o protegerlo con la misma auth de admin que ya existe.
-2. **Debug badge hardcodeado en HEAD_HTML** — el badge verde "standalone: true/false" está visible para todos los usuarios en producción. Eliminarlo.
+## Estado actual — todo esto ya está hecho y funcionando
 
-### 🟠 IMPORTANTE — Hacer después
-3. **Imágenes almacenadas en base64 en PostgreSQL** — cada imagen ocupa ~33% más espacio, los backups son enormes, y el pool de conexiones se satura. Migrar a almacenamiento en disco local (Railway volume) o Cloudflare R2/S3. Guardar solo la ruta/URL en la BD. Mantener compatibilidad con las imágenes ya existentes en BD durante la transición.
-4. **IDs sin SERIAL/IDENTITY en la tabla `muebles`** — el código actual hace LOCK TABLE + MAX(id)+1 para generar IDs, lo que es frágil bajo concurrencia. Generar un script de migración SQL para añadir GENERATED ALWAYS AS IDENTITY a la columna id.
+### Imágenes
+- Almacenadas en Cloudflare R2, bucket `inventario-el-jueves`
+- URL pública base: `pub-322ccea60cbc4785b3a59681ebaaa14e.r2.dev`
+- Rutas de servicio: `/img/{mueble_id}` e `/img_by_id/{img_id}` hacen redirect
+  307 a R2
+- La columna `imagen_base64` fue eliminada de código y BD
 
-### 🟡 DEUDA TÉCNICA — Hacer al final
-5. **Separar `main.py`** en módulos: `db.py`, `auth.py`, `images.py`, `routes.py`, `pages/index.py`
-6. **Estado de paginación en `app.storage.user`** — reemplazar por variables locales de la función de página
-7. **`ui.run_javascript('location.reload()')` × 10** — reemplazar por actualizaciones reactivas de componentes NiceGUI donde sea posible
-8. **Imports duplicados** — `from PIL import Image, features`, `import math`, `from datetime import datetime` aparecen dos veces
-9. **`_kv` y `_kv_attr`** son idénticas — eliminar la redundante
-10. **Cientos de líneas vacías al final del fichero** — limpiar
+### Base de datos
+- Tabla `muebles`: columna `id` con `GENERATED ALWAYS AS IDENTITY`
+- Tabla `imagenes_muebles`: columna `imagen_url TEXT`, sin `imagen_base64`
+- 13 categorías: Aparadores, Arquitectura, Armarios, Asientos, Bibliotecas,
+  Cómodas, Consolas, Deco, Escritorios, Espejos, Mesas, Mesas auxiliares,
+  Vajillas
+- 2 tiendas: El Rastro, Regueros
 
-## Instrucciones de trabajo
-- Empieza SOLO por los puntos 🔴 CRÍTICOS (1 y 2). No toques nada más hasta que yo confirme.
-- Antes de cada cambio, muéstrame exactamente qué vas a modificar y espera mi confirmación.
-- No rompas la funcionalidad existente. La app está en producción.
-- Cuando termines los críticos, para y dime qué hiciste para que yo pueda revisar y confirmar antes de continuar.
-- No hagas `git push` en ningún momento. Yo controlo cuándo se despliega.
+### IA
+- Gemini 2.5 Flash integrado en dos sitios:
+  - Wizard de añadir mueble: analiza foto y rellena campos automáticamente
+  - Chatbot Asesor de Estilo en `/asesor` (módulo `asesor_estilo.py`)
+
+### PWA
+- Banner de instalación iOS (`ios_installer.py`)
+- Manifest y Service Worker en `static/`
+- `start_url=/`
+
+## Arquitectura de ficheros relevantes
+
+- `main.py` — toda la app (NiceGUI + FastAPI, ~900 líneas)
+- `asesor_estilo.py` — chatbot Asesor de Estilo con Gemini
+- `ios_installer.py` — banner PWA iOS
+- `migrate_images.py` — script de migración a R2 (ya ejecutado, no tocar)
+- `static/` — assets PWA (iconos, manifest, service worker)
+- `requirements.txt` — dependencias (sin versiones fijadas)
+
+## Variables de entorno
+
+- `POSTGRES_*` — conexión a BD
+- `R2_*` — Cloudflare R2 (access key, secret, bucket, public URL)
+- `GEMINI_API_KEY`
+- `STORAGE_SECRET`
+- `ADMIN_PASSWORD_HASH`
+- `BASE_URL`
+
+## Próximo trabajo — Fase 5: Frontend Next.js
+
+Crear un frontend Next.js en Vercel que consuma una API REST de FastAPI.
+Endpoints a añadir en `main.py`:
+
+- `GET /api/muebles?categoria=X&pagina=1&limite=20`
+- `GET /api/mueble/{id}`
+- `GET /api/categorias`
+- `GET /api/muebles/destacados`
+
+## Reglas de trabajo OBLIGATORIAS
+
+- Nunca hacer commit ni push sin aprobación explícita del usuario
+- Mostrar diff antes de aplicar cualquier cambio en el código
+- Nunca hardcodear credenciales en comandos — usar siempre variables del `.env`:
+  `source .env && python3 -c "..."` o `source .env && psql "postgresql://..."`
+- Cambios incrementales, uno a uno, con verificación entre cada uno
+- No actuar en producción (BD, Railway, R2) sin confirmación explícita
