@@ -480,6 +480,7 @@ HEAD_HTML = """
   }
   @media (min-width: 641px) {
     details.filtros-panel > summary { display: none !important; }
+    details.filtros-panel > *:not(summary) { display: flex !important; flex-wrap: wrap; gap: 18px; }
   }
 
   /* ============================================================
@@ -692,23 +693,7 @@ _paq.push(['trackPageView']); _paq.push(['enableLinkTracking']);
   s.parentNode.insertBefore(g,s);
 })();
 
-function syncFiltrosOpen() {
-  var el = document.querySelector('details.filtros-panel');
-  if (!el) return;
-  if (window.matchMedia('(max-width: 640px)').matches) {
-    el.removeAttribute('open');
-  } else {
-    el.setAttribute('open', '');
-  }
-}
-addEventListener('DOMContentLoaded', function() {
-  syncFiltrosOpen();
-  setTimeout(syncFiltrosOpen, 200);
-  setTimeout(syncFiltrosOpen, 800);
-});
-addEventListener('resize', function() {
-  requestAnimationFrame(syncFiltrosOpen);
-});
+
 </script>
 """.replace('__MATOMO_URL__', os.getenv('MATOMO_URL', 'https://inventarioeljueves.matomo.cloud/'))
 
@@ -786,7 +771,9 @@ def is_admin() -> bool:
     return bool(app.storage.user.get('is_admin', False))
 
 # ---------- Utilidades ----------
-TIPOS = ["Mesa","Consola","Buffet","Biblioteca","Armario","Cómoda","Columna","Espejo","Copa","Asiento","Otro artículo"]
+TIPOS = ["Aparadores","Arquitectura","Armarios","Asientos","Bibliotecas",
+         "Cómodas","Consolas","Deco","Escritorios","Espejos",
+         "Mesas","Mesas auxiliares","Vajillas"]
 
 async def analyze_image_with_gemini(image_bytes: bytes) -> dict:
     if not HAS_GEMINI:
@@ -1404,7 +1391,7 @@ def dialog_add_mueble(on_saved=None):
                 nombre = ui.input('Nombre*')
                 precio = ui.number(label='Precio (€)*', format='%.2f', min=0)
                 tienda = ui.select(['El Rastro', 'Regueros'], value='El Rastro', label='Tienda')
-                tipo = ui.select(TIPOS, value='Otro artículo', label='Tipo de mueble')
+                tipo = ui.select(TIPOS, value='Deco', label='Tipo de mueble')
             descripcion = ui.textarea('Descripción').classes('w-full mt-2')
         paso2.set_visibility(False)
 
@@ -1527,7 +1514,7 @@ def dialog_edit_mueble(mueble_id: int, on_saved=None):
             with cont:
                 with ui.grid(columns=2).classes('gap-3'):
                     tienda = ui.select(['El Rastro', 'Regueros'], value=mueble['tienda'], label='Tienda')
-                    tipo = ui.select(TIPOS, value=mueble['tipo'] or 'Otro artículo', label='Tipo de mueble')
+                    tipo = ui.select(TIPOS, value=mueble['tipo'] or 'Deco', label='Tipo de mueble')
                     nombre = ui.input('Nombre*', value=mueble['nombre'])
                     precio = ui.number(label='Precio (€)*', value=float(mueble['precio'] or 0), format='%.2f', min=0)
                 descripcion = ui.textarea('Descripción', value=mueble.get('descripcion') or '').classes('w-full')
@@ -1917,7 +1904,7 @@ async def index(request: Request):
                 ui.button('Añadir nueva antigüedad', on_click=lambda: dialog_add_mueble(on_saved=refrescar).open()) \
                     .classes('btn-primary-editorial q-mb-md')
 
-            with ui.element('details').classes('filtros-panel').props('open'):
+            with ui.element('details').classes('filtros-panel'):
                 with ui.element('summary').classes('filtros-summary'):
                     ui.label('🔍 Filtrar el inventario')
                 with ui.row().style('gap:18px; flex-wrap:wrap;'):
