@@ -952,7 +952,7 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
     try:
         async with app.state.pool.acquire() as conn:
             row = await conn.fetchrow("""
-                SELECT imagen_base64, imagen_url FROM imagenes_muebles
+                SELECT imagen_url FROM imagenes_muebles
                 WHERE mueble_id=$1
                 ORDER BY es_principal DESC, id ASC
                 OFFSET $2 LIMIT 1
@@ -965,20 +965,7 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
         if row['imagen_url']:
             return RedirectResponse(row['imagen_url'], status_code=307)
 
-        data = base64.b64decode(row['imagen_base64'])
-
-        if thumb == 1:
-            # _thumb_bytes devuelve (bytes, mime)
-            data, mime = _thumb_bytes(data, 720)
-        else:
-            # Detecta el tipo real por si guardaste JPEG/PNG
-            mime = _detect_mime(data)
-
-        headers, etag = _cache_headers(data)
-        if request.headers.get('if-none-match') == etag:
-            return Response(status_code=304, headers=headers)
-
-        return Response(content=data, media_type=mime, headers=headers)
+        return Response(status_code=404)
 
     except Exception as e:
         print(f"[img] ERROR mid={mueble_id} i={i}: {type(e).__name__}: {e}")
@@ -989,7 +976,7 @@ async def img(request: Request, mueble_id: int, i: int = 0, thumb: int = 0):
 async def img_by_id(request: Request, img_id: int, thumb: int = 0):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow(
-            'SELECT imagen_base64, imagen_url FROM imagenes_muebles WHERE id=$1', img_id
+            'SELECT imagen_url FROM imagenes_muebles WHERE id=$1', img_id
         )
     if not row:
         return Response(status_code=404)
@@ -997,16 +984,7 @@ async def img_by_id(request: Request, img_id: int, thumb: int = 0):
     if row['imagen_url']:
         return RedirectResponse(row['imagen_url'], status_code=307)
 
-    data = base64.b64decode(row['imagen_base64'])
-    if thumb == 1:
-        data, mime = _thumb_bytes(data, 720)
-    else:
-        mime = _detect_mime(data)
-
-    headers, etag = _cache_headers(data)
-    if request.headers.get('if-none-match') == etag:
-        return Response(status_code=304, headers=headers)
-    return Response(content=data, media_type=mime, headers=headers)
+    return Response(status_code=404)
 
 # === JPEG 1200px para Open Graph (WhatsApp/Twitter/FB) ===
 def _jpeg_from_b64(b64: str, max_w: int = 1200, quality: int = 86) -> bytes:
@@ -1037,7 +1015,7 @@ def _jpeg_from_bytes(raw: bytes, max_w: int = 1200, quality: int = 86) -> bytes:
 async def og_img(request: Request, mueble_id: int):
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow("""
-            SELECT imagen_base64, imagen_url FROM imagenes_muebles
+            SELECT imagen_url FROM imagenes_muebles
             WHERE mueble_id=$1
             ORDER BY es_principal DESC, id ASC
             LIMIT 1
@@ -1054,7 +1032,7 @@ async def og_img(request: Request, mueble_id: int):
                 src = r.read()
             jpeg = _jpeg_from_bytes(src)
         else:
-            jpeg = _jpeg_from_b64(row['imagen_base64'])
+            return Response(status_code=404)
     except Exception as e:
         print(f"[og_img] ERROR mid={mueble_id}: {type(e).__name__}: {e}")
         return Response(status_code=500)
@@ -1229,16 +1207,9 @@ async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
             for i, b in enumerate(images_bytes):
                 try:
                     b_webp = to_img_bytes(b)
-                    if not R2_ENABLED:
-                        b64 = base64.b64encode(b_webp).decode('utf-8')
-                        await conn.execute(
-                            'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
-                            mid, b64, (i == 0)
-                        )
-                        continue
                     img_id = await conn.fetchval(
-                        'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) '
-                        'VALUES ($1, NULL, $2) RETURNING id',
+                        'INSERT INTO imagenes_muebles (mueble_id, es_principal) '
+                        'VALUES ($1, $2) RETURNING id',
                         mid, (i == 0)
                     )
                     key = f'{mid}_{img_id}.webp'
@@ -1294,16 +1265,9 @@ async def delete_mueble(mueble_id: int):
 async def add_image(mueble_id: int, content_bytes: bytes, will_be_principal: bool = False):
     b_webp = to_img_bytes(content_bytes)
     async with app.state.pool.acquire() as conn:
-        if not R2_ENABLED:
-            b64 = base64.b64encode(b_webp).decode('utf-8')
-            await conn.execute(
-                'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) VALUES ($1,$2,$3)',
-                mueble_id, b64, will_be_principal
-            )
-            return
         img_id = await conn.fetchval(
-            'INSERT INTO imagenes_muebles (mueble_id, imagen_base64, es_principal) '
-            'VALUES ($1, NULL, $2) RETURNING id',
+            'INSERT INTO imagenes_muebles (mueble_id, es_principal) '
+            'VALUES ($1, $2) RETURNING id',
             mueble_id, will_be_principal
         )
         key = f'{mueble_id}_{img_id}.webp'
