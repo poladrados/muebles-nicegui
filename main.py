@@ -1177,24 +1177,14 @@ async def get_mueble(mueble_id: int):
 async def add_mueble(data: dict, images_bytes: list[bytes]) -> int:
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
-            # Obtener un ID válido aunque la columna id no tenga DEFAULT
-            seq = await conn.fetchval("SELECT pg_get_serial_sequence('muebles','id')")
-            if seq:
-                mid = await conn.fetchval("SELECT nextval($1::regclass)", seq)
-            else:
-                # Fallback seguro: bloquea la tabla y calcula MAX(id)+1
-                await conn.execute("LOCK TABLE muebles IN SHARE ROW EXCLUSIVE MODE")
-                mid = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM muebles")
-
-            # Insertar el mueble
-            await conn.execute(
+            mid = await conn.fetchval(
                 """
-                INSERT INTO muebles (id, nombre, precio, descripcion, tienda, tipo, fecha,
+                INSERT INTO muebles (nombre, precio, descripcion, tienda, tipo, fecha,
                     alto,largo,fondo,diametro,diametro_base,diametro_boca,alto_respaldo,alto_asiento,ancho,vendido)
-                VALUES ($1,$2,$3,$4,$5,$6, NOW(),
-                        $7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                VALUES ($1,$2,$3,$4,$5, NOW(),
+                        $6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                RETURNING id
                 """,
-                mid,
                 data.get('nombre'), data.get('precio'), data.get('descripcion'),
                 data.get('tienda'), data.get('tipo'),
                 data.get('alto'), data.get('largo'), data.get('fondo'),
