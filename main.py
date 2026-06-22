@@ -235,7 +235,7 @@ HEAD_HTML = """
     margin-bottom: 18px;
     transition: box-shadow .35s ease, transform .35s ease;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
   }
   .mueble-card.q-card::before {
     content: "";
@@ -1607,8 +1607,7 @@ def dialog_edit_mueble(mueble_id: int, on_saved=None):
                         else:
                             ui.run_javascript('location.reload()')
                     ui.button('Guardar', on_click=guardar, color='primary')
-        ui.timer(0.05, cargar_datos, once=True)
-    return d
+    return d, cargar_datos
 
 # ---------- Listado (diseño + admin) ----------
 
@@ -1750,8 +1749,11 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
 
                                 if is_admin():
                                     with ui.element('div').classes('mueble-actions-admin'):
-                                        ui.button('Editar', on_click=lambda _mid=mid: dialog_edit_mueble(_mid, on_saved=on_change).open()) \
-                                            .classes('btn-ghost')
+                                        d_edit, reload_edit = dialog_edit_mueble(mid, on_saved=on_change)
+                                        async def abrir_editar(_d=d_edit, _reload=reload_edit):
+                                            await _reload()
+                                            _d.open()
+                                        ui.button('Editar', on_click=abrir_editar).classes('btn-ghost')
 
                                         def ask_delete_mueble(_=None, _mid=mid, _card=card_container):
                                             with ui.dialog() as dd:
