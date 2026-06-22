@@ -27,7 +27,7 @@
 **Pendiente para próxima sesión:**
 - Fase 5: endpoints API REST en FastAPI para el frontend Next.js
 - Crear proyecto Next.js en Vercel
-- Resolver problema 'State' object has no attribute 'pool' detectado en producción (causa pendiente de confirmar por logs de Railway)
+- Resuelto: error 'State' object has no attribute 'pool' causado por contraseña de BD incorrecta en Railway tras el reset de credenciales. Corregido actualizando POSTGRES_PASSWORD en variables de entorno de Railway.
 
 ---
 
