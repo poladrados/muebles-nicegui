@@ -28,11 +28,11 @@
 - Schema BD: `id` con `GENERATED ALWAYS AS IDENTITY (START WITH 166)`
 - `add_mueble` simplificado: `INSERT ... RETURNING id`, sin LOCK TABLE
 
-## 🔲 Fase 5 — Frontend Next.js (próximo)
-- [ ] Endpoints API REST en FastAPI
+## 🔄 Fase 5 — Frontend Next.js (en curso)
+- [x] Endpoints API REST en FastAPI
+- [x] Columna destacado + toggle admin
 - [ ] Proyecto Next.js en Vercel
-- [ ] Home con diseño Stitch
-- [ ] Catálogo (categorías → listado → ficha)
-- [ ] Buscador + asesor IA
-- [ ] PWA en Next.js
-- [ ] Dominio personalizado
+- [ ] Home (5B)
+- [ ] Catálogo: categorías → listado → ficha (5C)
+- [ ] Buscador + asesor IA (5D)
+- [ ] PWA + dominio personalizado (5D)

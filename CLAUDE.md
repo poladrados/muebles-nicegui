@@ -35,6 +35,16 @@ próximamente a Next.js en Vercel.
 - Manifest y Service Worker en `static/`
 - `start_url=/`
 
+### API REST pública
+- `GET /api/categorias` — lista las 13 categorías
+- `GET /api/muebles` — listado con filtros categoria, precio, paginación
+- `GET /api/mueble/{id}` — ficha completa con array de imágenes
+- `GET /api/muebles/destacados` — máximo 4 muebles con destacado=TRUE
+
+### Destacados
+- Columna `destacado BOOLEAN NOT NULL DEFAULT FALSE` en tabla `muebles`
+- Toggle en admin NiceGUI con límite de 4 y mensaje de error explicativo
+
 ## Arquitectura de ficheros relevantes
 
 - `main.py` — toda la app (NiceGUI + FastAPI, ~900 líneas)
@@ -53,15 +63,16 @@ próximamente a Next.js en Vercel.
 - `ADMIN_PASSWORD_HASH`
 - `BASE_URL`
 
-## Próximo trabajo — Fase 5: Frontend Next.js
+## Próximo trabajo — Fase 5B: Frontend Next.js
 
-Crear un frontend Next.js en Vercel que consuma una API REST de FastAPI.
-Endpoints a añadir en `main.py`:
+La API REST ya está lista. Siguiente paso: crear el proyecto Next.js en Vercel
+que la consuma.
 
-- `GET /api/muebles?categoria=X&pagina=1&limite=20`
-- `GET /api/mueble/{id}`
-- `GET /api/categorias`
-- `GET /api/muebles/destacados`
+- Crear proyecto Next.js en Vercel
+- Home con diseño Stitch
+- Catálogo: categorías → listado → ficha (5C)
+- Buscador + asesor IA (5D)
+- PWA + dominio personalizado (5D)
 
 ## Reglas de trabajo OBLIGATORIAS
 

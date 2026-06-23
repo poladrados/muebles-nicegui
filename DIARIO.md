@@ -1,5 +1,31 @@
 # Diario de Desarrollo
 
+## 23 junio 2026
+### Sesión de trabajo — Fase 5A: API REST + infraestructura destacados
+
+**Completado:**
+
+- **Columna `destacado`** — `ALTER TABLE muebles ADD COLUMN destacado BOOLEAN NOT NULL DEFAULT FALSE` ejecutado en producción. Todos los muebles existentes quedan en FALSE automáticamente.
+- **4 endpoints REST públicos** añadidos en `main.py` antes de `ui.run()`:
+  - `GET /api/categorias` — lista estática de 13 categorías
+  - `GET /api/muebles` — listado con filtros (categoria, precio_min, precio_max, pagina, limite), JOIN con imagenes_muebles para imagen principal
+  - `GET /api/mueble/{id}` — ficha completa con array de todas las imágenes y campo `destacado`
+  - `GET /api/muebles/destacados` — máximo 4 resultados con `destacado=TRUE AND vendido=FALSE`
+  - Todos verificados con curl en local: respuestas correctas, paginación funcional, URLs de R2 en imagen_url
+- **Toggle Destacado en admin** — switch en cada card del listado (`pintar_listado`), visible solo para admins. Consulta COUNT en BD al activar; si ya hay 4 destacados muestra notificación de error y revierte el switch sin tocar la BD. Actualización reactiva sin `location.reload()`.
+
+**Decisiones tomadas:**
+- `/api/muebles/destacados` definido antes de `/api/mueble/{id}` en el código para evitar que FastAPI interprete "destacados" como un entero en el path param
+- `e.sender` en el handler del switch para evitar problemas de closure en el loop de cards
+- Límite de 4 destacados consultado siempre en BD, nunca en estado local
+
+**Pendiente (Fase 5B):**
+- Commit de toda la Fase 5A (pendiente aprobación)
+- Crear proyecto Next.js en Vercel
+- Home con diseño Stitch
+
+---
+
 ## 22 junio 2026
 ### Sesión de trabajo — Deuda técnica (Fase 4)
 

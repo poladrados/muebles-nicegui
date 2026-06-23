@@ -1709,6 +1709,30 @@ async def pintar_listado(vendidos=False, nombre_like=None, tienda='Todas', tipo=
                                             _d.open()
                                         ui.button('Editar', on_click=abrir_editar).classes('btn-ghost')
 
+                                        async def _on_destacado(e, _mid=mid):
+                                            async with app.state.pool.acquire() as conn:
+                                                if e.value:
+                                                    count = await conn.fetchval(
+                                                        'SELECT COUNT(*) FROM muebles WHERE destacado = TRUE'
+                                                    )
+                                                    if count >= 4:
+                                                        ui.notify(
+                                                            'Ya tienes 4 piezas destacadas. Para añadir esta, '
+                                                            'desactiva primero una de las actuales.',
+                                                            type='negative',
+                                                        )
+                                                        e.sender.set_value(False)
+                                                        return
+                                                await conn.execute(
+                                                    'UPDATE muebles SET destacado=$1 WHERE id=$2',
+                                                    e.value, _mid
+                                                )
+                                        ui.switch(
+                                            'Destacado',
+                                            value=bool(m.get('destacado', False)),
+                                            on_change=_on_destacado,
+                                        )
+
                                         def ask_delete_mueble(_=None, _mid=mid, _card=card_container):
                                             with ui.dialog() as dd:
                                                 with ui.card():
@@ -1952,6 +1976,146 @@ async def index(request: Request):
 async def asesor_page():
     ui.add_head_html(HEAD_HTML)
     advisor_chat_ui(app.state.advisor)
+
+
+# ---------- API REST pública ----------
+
+@app.get('/api/categorias')
+async def api_categorias():
+    return JSONResponse({"categorias": TIPOS})
+
+
+@app.get('/api/muebles/destacados')
+async def api_destacados():
+    try:
+        async with app.state.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT m.id, m.nombre, m.tipo, m.tienda, m.precio,
+                       i.imagen_url
+                FROM muebles m
+                LEFT JOIN imagenes_muebles i
+                    ON i.mueble_id = m.id
+                    AND i.id = (
+                        SELECT id FROM imagenes_muebles
+                        WHERE mueble_id = m.id
+                        ORDER BY es_principal DESC, id ASC
+                        LIMIT 1
+                    )
+                WHERE m.destacado = TRUE AND m.vendido = FALSE
+                ORDER BY m.id DESC
+                LIMIT 4
+                """
+            )
+        items = [
+            {
+                "id": r['id'],
+                "nombre": r['nombre'],
+                "categoria": r['tipo'],
+                "tienda": r['tienda'],
+                "precio": float(r['precio']) if r['precio'] is not None else None,
+                "imagen_url": r['imagen_url'],
+            }
+            for r in rows
+        ]
+        return JSONResponse({"items": items})
+    except Exception as e:
+        print(f"[api_destacados] ERROR: {e}")
+        return JSONResponse({"error": "Error interno"}, status_code=500)
+
+
+@app.get('/api/muebles')
+async def api_muebles(
+    categoria: str | None = None,
+    pagina: int = 1,
+    limite: int = 20,
+    precio_min: float | None = None,
+    precio_max: float | None = None,
+):
+    try:
+        where, params = ["vendido = FALSE"], []
+        if categoria:
+            params.append(categoria)
+            where.append(f'tipo = ${len(params)}')
+        if precio_min is not None:
+            params.append(precio_min)
+            where.append(f'precio >= ${len(params)}')
+        if precio_max is not None:
+            params.append(precio_max)
+            where.append(f'precio <= ${len(params)}')
+        where_sql = 'WHERE ' + ' AND '.join(where)
+        offset = (pagina - 1) * limite
+        params_page = params + [limite, offset]
+        async with app.state.pool.acquire() as conn:
+            total = await conn.fetchval(
+                f'SELECT COUNT(*) FROM muebles {where_sql}', *params
+            )
+            rows = await conn.fetch(
+                f"""
+                SELECT m.id, m.nombre, m.tipo, m.tienda, m.precio,
+                       i.imagen_url
+                FROM muebles m
+                LEFT JOIN imagenes_muebles i
+                    ON i.mueble_id = m.id
+                    AND i.id = (
+                        SELECT id FROM imagenes_muebles
+                        WHERE mueble_id = m.id
+                        ORDER BY es_principal DESC, id ASC
+                        LIMIT 1
+                    )
+                {where_sql}
+                ORDER BY m.id DESC
+                LIMIT ${len(params_page) - 1} OFFSET ${len(params_page)}
+                """,
+                *params_page
+            )
+        items = [
+            {
+                "id": r['id'],
+                "nombre": r['nombre'],
+                "categoria": r['tipo'],
+                "tienda": r['tienda'],
+                "precio": float(r['precio']) if r['precio'] is not None else None,
+                "imagen_url": r['imagen_url'],
+            }
+            for r in rows
+        ]
+        return JSONResponse({"total": total, "pagina": pagina, "limite": limite, "items": items})
+    except Exception as e:
+        print(f"[api_muebles] ERROR: {e}")
+        return JSONResponse({"error": "Error interno"}, status_code=500)
+
+
+@app.get('/api/mueble/{mueble_id}')
+async def api_mueble(mueble_id: int):
+    try:
+        async with app.state.pool.acquire() as conn:
+            m = await conn.fetchrow(
+                'SELECT * FROM muebles WHERE id=$1', mueble_id
+            )
+            if not m:
+                return JSONResponse({"error": "No encontrado"}, status_code=404)
+            imgs = await conn.fetch(
+                """SELECT imagen_url FROM imagenes_muebles
+                   WHERE mueble_id=$1 ORDER BY es_principal DESC, id ASC""",
+                mueble_id
+            )
+        return JSONResponse({
+            "id": m['id'],
+            "nombre": m['nombre'],
+            "descripcion": m['descripcion'],
+            "categoria": m['tipo'],
+            "tienda": m['tienda'],
+            "precio": float(m['precio']) if m['precio'] is not None else None,
+            "ancho": m['ancho'],
+            "alto": m['alto'],
+            "fondo": m['fondo'],
+            "destacado": m['destacado'],
+            "imagenes": [r['imagen_url'] for r in imgs if r['imagen_url']],
+        })
+    except Exception as e:
+        print(f"[api_mueble] ERROR id={mueble_id}: {e}")
+        return JSONResponse({"error": "Error interno"}, status_code=500)
 
 
 # ---------- Run ----------
