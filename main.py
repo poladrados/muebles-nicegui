@@ -5,6 +5,7 @@ from nicegui import ui, app
 from fastapi import Response, Request, status
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import asyncpg
 import os, base64, urllib.parse, urllib.request, hashlib, hmac, asyncio, html, math
 from functools import partial
@@ -88,6 +89,18 @@ async def _read_upload_bytes(e) -> bytes:
                 pass
 
     return b''
+
+# ---------- CORS ----------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://el-jueves-web.vercel.app",
+        "http://localhost:3000",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 # ---------- PWA / static ----------
 try:
