@@ -17,3 +17,5 @@ venv/
 
 # Backups de BD
 backup_*.sql
+.env.save
+.obsidian/

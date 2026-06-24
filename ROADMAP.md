@@ -28,11 +28,21 @@
 - Schema BD: `id` con `GENERATED ALWAYS AS IDENTITY (START WITH 166)`
 - `add_mueble` simplificado: `INSERT ... RETURNING id`, sin LOCK TABLE
 
-## 🔄 Fase 5 — Frontend Next.js (en curso)
+## ✅ Fase 5A/5B/5C — Frontend Next.js (completado)
 - [x] Endpoints API REST en FastAPI
 - [x] Columna destacado + toggle admin
-- [ ] Proyecto Next.js en Vercel
-- [ ] Home (5B)
-- [ ] Catálogo: categorías → listado → ficha (5C)
-- [ ] Buscador + asesor IA (5D)
-- [ ] PWA + dominio personalizado (5D)
+- [x] Proyecto Next.js en Vercel — repo `el-jueves-web`, https://el-jueves-web.vercel.app
+- [x] Design system Ethereal Dwelling — primary navy #5b708b, Libre Caslon Text + Manrope
+- [x] Página de categorías `/catalogo` con imágenes R2 (revalida 1h)
+- [x] Listado `/catalogo/[categoria]` — grid 2 cols, paginación numérica, validación de página fuera de rango
+- [x] Ficha `/catalogo/[categoria]/[id]` — hero, precio, WhatsApp, compartir, galería
+- [x] Home `/` — hero, editorial, destacados API, atmósfera, catálogo editorial 6 categorías
+- [x] Error boundaries editoriales (`error.tsx` global + catálogo)
+- [x] Loading skeletons con animate-pulse (listado + ficha)
+- [x] `getDestacados()` en api.ts, revalidate 60s en getMuebles/getMueble
+- [x] `NEXT_PUBLIC_BASE_URL` para URL de compartir
+- [x] Navbar navy en home, blanco en el resto
+
+## 🔄 Fase 5D — Pendiente
+- [ ] Buscador + asesor IA
+- [ ] PWA + dominio personalizado

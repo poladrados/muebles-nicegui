@@ -2044,6 +2044,7 @@ async def api_muebles(
     limite: int = 20,
     precio_min: float | None = None,
     precio_max: float | None = None,
+    q: str | None = None,
 ):
     try:
         where, params = ["vendido = FALSE"], []
@@ -2056,6 +2057,9 @@ async def api_muebles(
         if precio_max is not None:
             params.append(precio_max)
             where.append(f'precio <= ${len(params)}')
+        if q:
+            params.append(f'%{q.strip().lower()}%')
+            where.append(f'LOWER(nombre) LIKE ${len(params)}')
         where_sql = 'WHERE ' + ' AND '.join(where)
         offset = (pagina - 1) * limite
         params_page = params + [limite, offset]

@@ -1,6 +1,100 @@
 # Diario de Desarrollo
 
+## 23 junio 2026 (continuación)
+### Sesión de trabajo — Fase 5B home + pulido general
+
+**Completado:**
+
+- **Home page `app/page.tsx`** — 5 secciones: hero full-bleed (`ui/hero/image00001.png`), editorial "Piezas Maestras" (`ui/hero/image00002.jpeg`, aspect 4/5), destacados desde API (grid 2/4 cols, cards cuadradas), atmósfera (fondo navy, cita), catálogo editorial (6 categorías con thumbnails R2 en grid 1/2/3 cols con overlay).
+- **`getDestacados()`** añadida a `lib/api.ts` — `GET /api/muebles/destacados`, revalida 60s.
+- **Color primario cambiado** — `--color-primary: #5b708b` (navy) en lugar de `#000000`. Afecta titulares, botones, paginación activa, bordes en todo el sitio.
+- **Navbar adaptativa** — navy con texto blanco en `/`, blanco con texto oscuro en el resto (usa `usePathname`).
+- **Error boundaries** — `app/error.tsx` y `app/catalogo/error.tsx`: mensaje editorial en español + botón Reintentar, `min-h-[60vh]`.
+- **Loading skeletons** — `app/catalogo/[categoria]/loading.tsx` (grid 6 placeholders aspect 4/5) y `app/catalogo/[categoria]/[id]/loading.tsx` (hero + detalles), ambos con `animate-pulse`.
+- **Validación paginación** — `notFound()` si `pagina > totalPaginas && data.total > 0` en listado de categoría.
+- **`NEXT_PUBLIC_BASE_URL`** — botón Compartir en ficha usa variable de entorno en vez de URL hardcodeada.
+- **`revalidate` reducido** — `getMuebles` y `getMueble` de 300s a 60s (piezas únicas que se venden).
+
+**Decisiones tomadas:**
+- Solo 2 de las 7 fotos de hero se usan (las más ligeras/adecuadas); las 5 restantes disponibles en R2 para uso futuro.
+- La home no tiene botón "Explorar Colección" (eliminado — el hero es suficiente llamada a la acción visual).
+- `global-error.tsx` no implementado — `error.tsx` cubre errores de rutas; errores de layout raíz son edge case.
+
+---
+
 ## 23 junio 2026
+### Sesión de trabajo — Fase 5B: Proyecto Next.js + página de categorías
+
+**Completado:**
+
+- **Repo `el-jueves-web`** clonado desde GitHub, proyecto Next.js inicializado con `create-next-app` (Next.js 16.2.9, React 19, Tailwind 4, TypeScript, App Router, `bun` como gestor de paquetes).
+- **Conectado a Vercel** — proyecto `poladrados-projects/el-jueves-web`, URL de producción https://el-jueves-web.vercel.app, GitHub conectado (push a `main` = deploy automático).
+- **Variables de entorno en Vercel** — `NEXT_PUBLIC_API_URL` y `NEXT_PUBLIC_R2_PUBLIC_URL` configuradas en production/preview/development.
+- **Design system Ethereal Dwelling** portado desde Stitch (proyecto "Remix of Modern Home Decor Catalog", ID: `15823448740352260755`) a `globals.css` con `@theme inline` de Tailwind 4. Fuentes: Libre Caslon Text (serif, titulares) + Manrope (sans, cuerpo).
+- **Imágenes de categorías** subidas a R2 en `ui/categorias/{nombre}/image000XX.jpeg` — 14 carpetas. Mapa estático en `lib/categorias.ts` resuelve discrepancias de nombres (arquitectura→arquitecturas, URL-encoding de cómodas y mesas auxiliares).
+- **Página `/catalogo`** — server component, lista vertical de categorías con thumbnail de R2, hover con flecha, enlaza a `/catalogo/{slug}`. Revalidación 1h.
+- **Componentes compartidos**: `Navbar` (fijo, shadow on scroll) y `BottomNav` (móvil, estado activo por pathname).
+- **`next.config.ts`**: `images.remotePatterns` para R2.
+- Build limpio sin errores ni warnings.
+
+**Decisiones tomadas:**
+- Mapa de categorías→imágenes estático (no derivado algorítmicamente) para manejar limpiamente las inconsistencias entre nombres de API y carpetas de R2.
+- Material Symbols vía Google Fonts CDN en el `<head>` del layout raíz.
+- `bun` como gestor de paquetes (npm tenía caché con permisos de root rotos).
+
+**Pendiente:**
+- Commit y push del proyecto (pendiente aprobación)
+- Home page (hero + destacados + categorías preview) — sin fotos de hero todavía
+
+---
+
+### Sesión de trabajo — Fase 5C: Listado y ficha de mueble
+
+**Completado:**
+
+- **`src/lib/api.ts`** ampliado con tipos TypeScript y funciones:
+  - `getMuebles(categoria, pagina, limite)` → `GET /api/muebles?categoria=X&pagina=N&limite=12`
+  - `getMueble(id)` → `GET /api/mueble/{id}`
+  - `formatPrecio(precio)` → `"1.200 €"` con `toLocaleString('es-ES')`
+  - `formatMedidas(ancho, alto, fondo)` → `"210 cm alt. · 130 cm anch. · 55 cm fond."`
+  - Tipos: `MuebleResumen`, `MuebleDetalle`, `ListadoResponse`
+- **`src/lib/categorias.ts`** ampliado con `nombreDesdeSlug(slug)` — reverse map de slug URL a nombre de API, construido automáticamente desde `CATEGORIA_IMAGE`.
+- **`/catalogo/[categoria]/page.tsx`** — listado de muebles:
+  - Server component, fetchea `/api/muebles?categoria={nombre}`
+  - Grid 2 columnas, imagen aspect-[4/5], nombre serif, precio
+  - Paginación numérica (12 ítems/página)
+  - Breadcrumb ← Catálogo
+  - Footer CTA con WhatsApp
+- **`/catalogo/[categoria]/[id]/page.tsx`** — ficha de mueble:
+  - Server component, fetchea `/api/mueble/{id}`
+  - Hero a ancho completo (3/4 móvil, 16/9 desktop)
+  - Badge "Pieza única", nombre, precio en grande
+  - Botón WhatsApp verde (wa.me/34699975202) con mensaje preformateado
+  - Botón Compartir (Web Share API, fallback copia al portapapeles vía script inline)
+  - Descripción (si existe)
+  - Panel detalles: medidas, categoría, tienda
+  - Galería secundaria: resto de imágenes en grid 2 columnas
+
+**Estructura de la API confirmada en esta sesión:**
+```
+GET /api/muebles → { total, pagina, limite, items: [{id, nombre, categoria, tienda, precio, imagen_url}] }
+GET /api/mueble/{id} → { id, nombre, descripcion, categoria, tienda, precio, ancho, alto, fondo, destacado, imagenes[] }
+```
+
+**Decisiones tomadas:**
+- No hay "Consultar precio" — se muestra el precio real; si es null, se muestra "—"
+- Paginación numérica (no "cargar más")
+- WhatsApp: número 699975202 (prefijo +34 en la URL)
+- Botón Compartir implementado con script vanilla en server component (evita convertir la página entera en client component)
+- `imagen_url` en el listado es la primera imagen del mueble (JOIN en la API)
+- Las medidas vienen como campos separados `ancho/alto/fondo` (floats, nullable), no como string
+
+**Pendiente:**
+- Commit y push de todo (pendiente aprobación)
+- Home page
+
+---
+
 ### Sesión de trabajo — Fase 5A: API REST + infraestructura destacados
 
 **Completado:**

@@ -63,14 +63,53 @@ próximamente a Next.js en Vercel.
 - `ADMIN_PASSWORD_HASH`
 - `BASE_URL`
 
-## Próximo trabajo — Fase 5B: Frontend Next.js
+## Frontend Next.js — Fase 5 en curso
 
-La API REST ya está lista. Siguiente paso: crear el proyecto Next.js en Vercel
-que la consuma.
+Repo separado: `github.com/poladrados/el-jueves-web`
+Path local: `/Users/pabloadrados/Documents/Proyectos/el-jueves-web`
+Stack: Next.js 16.2.9 · React 19 · Tailwind 4 · TypeScript · bun · Vercel
+URL producción: https://el-jueves-web.vercel.app
 
-- Crear proyecto Next.js en Vercel
-- Home con diseño Stitch
-- Catálogo: categorías → listado → ficha (5C)
+### Ya construido
+- Design system Ethereal Dwelling en `globals.css` — `--color-primary: #5b708b` (navy), Libre Caslon Text + Manrope
+- `lib/api.ts` — `getCategorias` (1h), `getMuebles` (60s), `getMueble` (60s), `getDestacados` (60s), `formatPrecio`, `formatMedidas`
+- `lib/categorias.ts` — mapa `CATEGORIA_IMAGE` (nombre→URL R2), `slugCategoria()`, `nombreDesdeSlug()` (reverse)
+- `components/Navbar.tsx` — navy en `/`, blanco en el resto; shadow on scroll
+- `components/BottomNav.tsx` — nav inferior móvil con estado activo por pathname
+- `app/page.tsx` — home: hero full-bleed, editorial "Piezas Maestras", destacados API, atmósfera, catálogo editorial 6 categorías
+- `app/catalogo/page.tsx` — lista vertical de 13 categorías con thumbnails R2, revalida 1h
+- `app/catalogo/[categoria]/page.tsx` — grid 2 cols, paginación numérica (12/pág), validación pagina>totalPaginas → notFound()
+- `app/catalogo/[categoria]/[id]/page.tsx` — ficha: hero full-width, precio, WhatsApp, compartir, descripción, medidas/tienda, galería
+- `app/error.tsx` y `app/catalogo/error.tsx` — error boundaries editoriales con botón Reintentar
+- `app/catalogo/[categoria]/loading.tsx` y `app/catalogo/[categoria]/[id]/loading.tsx` — skeletons con animate-pulse
+
+### Estructura de rutas
+```
+/                                → home (revalida 60s)
+/catalogo                        → lista de 13 categorías (revalida 1h)
+/catalogo/[categoria]            → listado de muebles por categoría (dinámico)
+/catalogo/[categoria]/[id]       → ficha de mueble (dinámico)
+```
+
+### Slugs de categorías (URL → nombre API)
+`aparadores`, `arquitectura`, `armarios`, `asientos`, `bibliotecas`, `comodas`,
+`consolas`, `deco`, `escritorios`, `espejos`, `mesas`, `mesas-auxiliares`, `vajillas`
+
+### Variables de entorno del frontend (en Vercel y `.env.local`)
+- `NEXT_PUBLIC_API_URL` = `https://web-production-a1a43.up.railway.app`
+- `NEXT_PUBLIC_R2_PUBLIC_URL` = `https://pub-322ccea60cbc4785b3a59681ebaaa14e.r2.dev`
+- `NEXT_PUBLIC_BASE_URL` = `https://el-jueves-web.vercel.app`
+
+### Imágenes UI en R2
+- `ui/categorias/{nombre}/image000XX.jpeg` — 14 carpetas (una por categoría)
+- `ui/hero/image00001.png` — hero home (sala con espejo)
+- `ui/hero/image00002.jpeg` — editorial "Piezas Maestras" (armario tallado)
+- `ui/hero/image00003.png` a `image00007.png/jpeg` — disponibles, no usadas aún
+
+### WhatsApp de contacto
+`+34 699 975 202` → `https://wa.me/34699975202`
+
+### Pendiente
 - Buscador + asesor IA (5D)
 - PWA + dominio personalizado (5D)
 
